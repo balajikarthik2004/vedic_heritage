@@ -76,7 +76,7 @@ const tiers = [
 
 export function SponsorshipSection() {
   return (
-    <section className="bg-[#e5e5e5] pt-14 px-6 md:px-12 pb-12 rounded-[36px] max-w-[1450px] mx-auto -mt-[30px] relative z-20 overflow-hidden shadow-2xl">
+    <section className="bg-[#e5e5e5] pt-14 px-6 md:px-12 pb-12 rounded-[36px] max-w-[1450px] mx-auto -mt-[30px] relative z-20 overflow-hidden">
       <div className="max-w-[1450px] mx-auto">
         {/* Header */}
         <div className="text-center mb-6 flex flex-col items-center">
