@@ -74,13 +74,22 @@ const tiers = [
   },
 ];
 
+// Alternating corner treatments. Odd cards (1, 3, 5) carry the wide sweep on the
+// top-right; even cards (2, 4, 6) mirror it to the top-left. Both share the 32px
+// bottom corners. Written as complete literal class strings so Tailwind's scanner
+// picks them up.
+const CORNERS_SWEEP_RIGHT =
+  'rounded-tl-[6px] rounded-tr-[52px] rounded-br-[32px] rounded-bl-[32px]';
+const CORNERS_SWEEP_LEFT =
+  'rounded-tl-[52px] rounded-tr-[6px] rounded-br-[32px] rounded-bl-[32px]';
+
 export function SponsorshipSection() {
   return (
     <section className="bg-[#e5e5e5] pt-14 px-6 md:px-12 pb-12 rounded-[36px] max-w-[1450px] mx-auto -mt-[30px] relative z-20 overflow-hidden">
       <div className="max-w-[1450px] mx-auto">
         {/* Header */}
         <div className="text-center mb-6 flex flex-col items-center">
-          <h2 className="font-['Alga','Bodoni_Moda','Playfair_Display',Georgia,serif] text-[clamp(24px,3vw,36px)] font-normal text-gray-800 m-0 mb-3 leading-[1.3] py-1">
+          <h2 className="font-['Alga','Bodoni_Moda','Playfair_Display',Georgia,serif] text-[48px] font-medium text-gray-800 m-0 mb-3 leading-[100%] tracking-[0] text-center py-1">
             Sponsorship Tiers &amp; Tickets
           </h2>
           {/* Diya */}
@@ -94,19 +103,22 @@ export function SponsorshipSection() {
 
         {/* Tier Cards Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-12">
-          {tiers.map(tier => (
+          {tiers.map((tier, index) => (
             <div
               key={tier.id}
-              className="bg-white rounded-[20px] overflow-hidden shadow-[0_4px_16px_rgba(0,0,0,0.06)]"
+              className={`bg-white overflow-hidden shadow-[0_4px_16px_rgba(0,0,0,0.06)] ${
+                index % 2 === 0 ? CORNERS_SWEEP_RIGHT : CORNERS_SWEEP_LEFT
+              }`}
             >
-              {/* Header */}
-              <div className="bg-[#1e293b] py-1.5 px-6">
+              {/* No radii here on purpose: the card's overflow-hidden clips the header to
+                  whichever corner variant that card uses, so the two cannot drift apart. */}
+              <div className="bg-[#1e293b] py-2 px-10">
                 <div className="font-['Outfit',sans-serif] text-[9.5px] font-bold tracking-[0.05em] uppercase text-white">
                   {tier.label}
                 </div>
               </div>
 
-              <div className="p-6">
+              <div className="px-10 pb-10 pt-6">
                 {/* Amount */}
                 <div
                   className="font-['Outfit',sans-serif] text-[28px] font-extrabold mb-6"
