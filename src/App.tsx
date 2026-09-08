@@ -1,4 +1,3 @@
-
 import { Navbar } from './components/Navbar';
 import { Hero } from './components/Hero';
 import { InfoBar } from './components/InfoBar';
@@ -9,41 +8,44 @@ import { ArtistsSection } from './components/ArtistsSection';
 import { SponsorshipSection } from './components/SponsorshipSection';
 import { SecureSeatSection } from './components/SecureSeatSection';
 import { FooterSection } from './components/FooterSection';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { SECTION } from './config/site';
 
 function App() {
   return (
-    <div className="min-h-screen bg-white font-['Outfit',sans-serif] overflow-x-hidden">
-      {/* ── Navbar ── */}
-      <Navbar />
+    <ErrorBoundary>
+      <div className="min-h-screen bg-white font-['Outfit',sans-serif] overflow-x-hidden">
+        {/* ── Navbar ── */}
+        <Navbar />
 
-      {/* ── Hero — full-bleed dark maroon section ── */}
-      <div style={{ background: '#34100b' }}>
-        <Hero />
-        {/* InfoBar overlaps the hero bottom — needs a light bg wrapper to emerge from */}
-        <div style={{ background: '#34100b', paddingBottom: '80px' }}>
-          <InfoBar />
+        {/* ── Hero — full-bleed dark maroon section ── */}
+        <div id={SECTION.home} style={{ background: '#34100b' }}>
+          <Hero />
+          {/* InfoBar overlaps the hero bottom — needs a light bg wrapper to emerge from */}
+          <div style={{ background: '#34100b', paddingBottom: '80px' }}>
+            <InfoBar />
+          </div>
         </div>
+
+        {/* ── Celebrate Diwali section (white bg) ── */}
+        <CelebrateSection />
+
+        {/* ── Unified Artists & Sponsorship Section (dark bg container) ── */}
+        <div className="bg-[#24313b]">
+          <ArtistsSection />
+          <SponsorshipSection />
+        </div>
+
+        <FaithCommunitySection />
+
+        <AboutHeritageSection />
+
+        <SecureSeatSection />
+
+        {/* ── Footer ── */}
+        <FooterSection />
       </div>
-
-      {/* ── Celebrate Diwali section (white bg) ── */}
-      <CelebrateSection />
-
-      {/* ── Unified Artists & Sponsorship Section (dark bg container) ── */}
-      <div className="bg-[#24313b]">
-        <ArtistsSection />
-        <SponsorshipSection />
-      </div>
-
-      <FaithCommunitySection />
-
-      <AboutHeritageSection />
-
-
-      <SecureSeatSection />
-
-      {/* ── Footer ── */}
-      <FooterSection />
-    </div>
+    </ErrorBoundary>
   );
 }
 

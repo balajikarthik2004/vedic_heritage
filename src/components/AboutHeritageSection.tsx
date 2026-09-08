@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ArrowRight } from 'lucide-react';
+import { SECTION, BOOKING } from '../config/site';
+import { scrollToSection } from '../lib/navigation';
 
 /**
  * Carousel images. Every file dropped into src/assets/slide is picked up here
  * automatically at build time and sorted by filename - no code change needed to
- * add or remove a slide. swami-guru.png lives in that folder too, so it is one
+ * add or remove a slide. swami-guru.webp lives in that folder too, so it is one
  * of the slides rather than a special case.
  */
 const slideImages: string[] = Object.entries(
@@ -25,21 +27,78 @@ export interface AboutHeritageSectionProps {
 export const AboutHeritageSection: React.FC<AboutHeritageSectionProps> = ({
   onExploreClick,
 }) => {
-  const [activeSlide, setActiveSlide] = useState(0);
   const totalSlides = slideImages.length;
 
-  // Advance on a timer. Clicking a dot resets the countdown because activeSlide
-  // is in the dependency list, so the interval is torn down and restarted.
+  /**
+   * `active` is the visible slide; `loaded` is the set of slides that have been
+   * given a `src`.
+   *
+   * The two live in one piece of state so that advancing a slide and marking the
+   * next one for loading is a single pure update - deriving `loaded` in an effect
+   * instead would mean a second render pass on every tick.
+   *
+   * Every <img> stays mounted so the crossfade still works, but only the current
+   * slide and the one after it are fetched on first paint. All eight sit inside
+   * the viewport, so without this the browser downloaded the lot up front
+   * (`loading="lazy"` only defers images that are off-screen). The set only
+   * grows, and each slide is fetched a full AUTOPLAY_MS before it is shown.
+   */
+  const [{ active: activeSlide, loaded }, setCarousel] = useState<{
+    active: number;
+    loaded: ReadonlySet<number>;
+  }>(() => ({
+    active: 0,
+    loaded: new Set(totalSlides > 1 ? [0, 1] : [0]),
+  }));
+
+  /** Restarts the autoplay countdown; bumped when a dot is clicked. */
+  const [timerEpoch, setTimerEpoch] = useState(0);
+
+  const show = useCallback(
+    (indexOf: (current: number) => number) =>
+      setCarousel((prev) => {
+        const active = indexOf(prev.active);
+        const upcoming = (active + 1) % totalSlides;
+        const loaded =
+          prev.loaded.has(active) && prev.loaded.has(upcoming)
+            ? prev.loaded
+            : new Set(prev.loaded).add(active).add(upcoming);
+        return { active, loaded };
+      }),
+    [totalSlides]
+  );
+
+  // Autoplay. Nothing that changes per tick is in the dependency list, so the
+  // interval is created once instead of being torn down and rebuilt every 5s.
   useEffect(() => {
     if (totalSlides < 2) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
     const timer = setInterval(
-      () => setActiveSlide((current) => (current + 1) % totalSlides),
+      () => show((current) => (current + 1) % totalSlides),
       AUTOPLAY_MS
     );
 
     return () => clearInterval(timer);
-  }, [activeSlide, totalSlides]);
+  }, [totalSlides, timerEpoch, show]);
+
+  const goToSlide = useCallback(
+    (index: number) => {
+      show(() => index);
+      setTimerEpoch((e) => e + 1);
+    },
+    [show]
+  );
+
+  const handleExplore =
+    onExploreClick ??
+    (() => {
+      if (BOOKING.websiteUrl) {
+        window.open(BOOKING.websiteUrl, '_blank', 'noopener,noreferrer');
+        return;
+      }
+      scrollToSection(SECTION.contact);
+    });
 
   const highlights = [
     'Daily Arti',
@@ -50,7 +109,10 @@ export const AboutHeritageSection: React.FC<AboutHeritageSectionProps> = ({
   ];
 
   return (
-    <section className="w-full bg-[#FFFFFF] py-4 sm:py-6 md:py-8 px-2 sm:px-4 md:px-6">
+    <section
+      id={SECTION.about}
+      className="w-full bg-[#FFFFFF] py-4 sm:py-6 md:py-8 px-2 sm:px-4 md:px-6"
+    >
       <div className="w-full max-w-[1340px] mx-auto">
 
         {/*
@@ -96,7 +158,7 @@ export const AboutHeritageSection: React.FC<AboutHeritageSectionProps> = ({
                 {slideImages.map((src, idx) => (
                   <img
                     key={src}
-                    src={src}
+                    src={loaded.has(idx) ? src : undefined}
                     alt={`Vedic Heritage temple life, image ${idx + 1} of ${totalSlides}`}
                     aria-hidden={idx !== activeSlide}
                     loading={idx === 0 ? 'eager' : 'lazy'}
@@ -114,8 +176,10 @@ export const AboutHeritageSection: React.FC<AboutHeritageSectionProps> = ({
                   {Array.from({ length: totalSlides }).map((_, idx) => (
                     <button
                       key={idx}
-                      onClick={() => setActiveSlide(idx)}
+                      type="button"
+                      onClick={() => goToSlide(idx)}
                       aria-label={`Go to slide ${idx + 1}`}
+                      aria-current={idx === activeSlide ? 'true' : undefined}
                       className={`transition-all duration-300 rounded-full cursor-pointer ${idx === activeSlide
                         ? 'w-3 h-3 bg-white shadow-md ring-2 ring-white/50'
                         : 'w-1.5 h-1.5 bg-white/60 hover:bg-white/90'
@@ -218,7 +282,7 @@ export const AboutHeritageSection: React.FC<AboutHeritageSectionProps> = ({
               <div className="pt-2">
                 <button
                   type="button"
-                  onClick={onExploreClick}
+                  onClick={handleExplore}
                   className="group inline-flex items-center justify-center gap-2.5 bg-[#ED7E00] hover:bg-[#D96B00] text-[#FFFFFF] font-bold text-xs sm:text-sm uppercase tracking-wider px-5 sm:px-7 py-3.5 rounded-[14px] shadow-md hover:shadow-lg transform active:scale-98 transition-all duration-200 cursor-pointer"
                 >
                   <span className="whitespace-nowrap">EXPLORE VEDIC HERITAGE</span>

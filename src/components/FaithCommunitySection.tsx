@@ -1,7 +1,8 @@
 import React from 'react';
-import havanImg from '../assets/sacred-havan.png';
-import prasadImg from '../assets/prasad-feast.png';
-import aartiImg from '../assets/sacred-aarti.png';
+import { SECTION } from '../config/site';
+import havanImg from '../assets/sacred-havan.webp';
+import prasadImg from '../assets/prasad-feast.webp';
+import aartiImg from '../assets/sacred-aarti.webp';
 
 export interface CommunityActivity {
   id: string;
@@ -41,7 +42,10 @@ export const FaithCommunitySection: React.FC<FaithCommunitySectionProps> = ({
   activities = defaultActivities,
 }) => {
   return (
-    <section className="w-full bg-[#FFFFFF] py-12 md:py-8 px-2 sm:px-4 md:px-6">
+    <section
+      id={SECTION.community}
+      className="w-full bg-[#FFFFFF] py-12 md:py-8 px-2 sm:px-4 md:px-6"
+    >
       <div className="w-full max-w-[1440px] mx-auto">
         {/* Header */}
         <div className="text-center mb-6 md:mb-8">

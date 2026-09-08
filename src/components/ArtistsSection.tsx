@@ -1,15 +1,20 @@
 
-import rahulImg from '../assets/shri rahul.png';
-import tejasImg from '../assets/shri tejas.png';
-import milindImg from '../assets/shri millnd.png';
-import amitImg from '../assets/shri amit.png';
+import rahulImg from '../assets/shri rahul.webp';
+import tejasImg from '../assets/shri tejas.webp';
+import milindImg from '../assets/shri millnd.webp';
+import amitImg from '../assets/shri amit.webp';
+import { SECTION } from '../config/site';
 
+// `intrinsic` is the encoded pixel size of each portrait. It is passed to the
+// <img> so the browser can reserve the box before the file arrives; the fixed
+// 238px CSS box still decides what is actually rendered.
 const artists = [
   {
     id: 1,
     name: 'Shri Rahul Deshpande',
     role: 'Classical Vocals',
     img: rahulImg,
+    intrinsic: { width: 476, height: 476 },
     objectPos: 'center top',
     cardRadius: '6px 52px 32px 32px',
     imageRadius: '4px 44px 24px 24px',
@@ -19,6 +24,7 @@ const artists = [
     name: 'Shri Tejas & Rajas Upadhye',
     role: 'Violin Duet',
     img: tejasImg,
+    intrinsic: { width: 476, height: 568 },
     objectPos: 'center top',
     cardRadius: '50px 6px 32px 32px',
     imageRadius: '44px 4px 24px 24px',
@@ -28,6 +34,7 @@ const artists = [
     name: 'Shri Milind Kulkarni',
     role: 'Harmonium',
     img: milindImg,
+    intrinsic: { width: 595, height: 476 },
     objectPos: 'center top',
     cardRadius: '6px 52px 32px 32px',
     imageRadius: '4px 44px 24px 24px',
@@ -37,6 +44,7 @@ const artists = [
     name: 'Shri Amit Kavthekar',
     role: 'Tabla',
     img: amitImg,
+    intrinsic: { width: 476, height: 476 },
     objectPos: 'center top',
     cardRadius: '50px 6px 32px 32px',
     imageRadius: '44px 4px 24px 24px',
@@ -45,7 +53,7 @@ const artists = [
 
 export function ArtistsSection() {
   return (
-    <section style={{ background: '#24313b', padding: '80px 24px 70px' }}>
+    <section id={SECTION.artists} style={{ background: '#24313b', padding: '80px 24px 70px' }}>
       <div style={{ maxWidth: '1180px', margin: '0 auto' }}>
 
         {/* ── Header ── */}
@@ -122,6 +130,10 @@ export function ArtistsSection() {
                   <img
                     src={artist.img}
                     alt={artist.name}
+                    width={artist.intrinsic.width}
+                    height={artist.intrinsic.height}
+                    loading="lazy"
+                    decoding="async"
                     style={{
                       width: '100%',
                       height: '100%',
@@ -174,13 +186,8 @@ export function ArtistsSection() {
           ))}
         </div>
       </div>
-
-      {/* Responsive adjustments */}
-      <style>{`
-        @media (max-width: 1180px) {
-          .artists-grid { flex-wrap: wrap !important; justify-content: center !important; gap: 40px !important; }
-        }
-      `}</style>
+      {/* The .artists-grid wrap behaviour below 1180px lives in index.css - it used
+          to be an inline <style> block, which re-injected the rule on every render. */}
     </section>
   );
 }

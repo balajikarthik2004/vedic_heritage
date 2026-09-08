@@ -16,3 +16,13 @@ body {
   font-family: 'Alga', 'Bodoni Moda', 'Playfair Display', Georgia, serif !important;
 }
 
+
+/* Artist cards sit on one row at the 1180px design width and wrap below it.
+   Moved here from an inline <style> block in ArtistsSection. */
+@media (max-width: 1180px) {
+  .artists-grid {
+    flex-wrap: wrap !important;
+    justify-content: center !important;
+    gap: 40px !important;
+  }
+}

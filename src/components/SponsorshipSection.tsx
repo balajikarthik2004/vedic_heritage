@@ -1,4 +1,5 @@
 
+import { SECTION, SPONSORSHIP_MAILTO } from '../config/site';
 
 const tiers = [
   {
@@ -85,7 +86,10 @@ const CORNERS_SWEEP_LEFT =
 
 export function SponsorshipSection() {
   return (
-    <section className="bg-[#e5e5e5] pt-14 px-6 md:px-12 pb-12 rounded-[36px] max-w-[1450px] mx-auto -mt-[30px] relative z-20 overflow-hidden">
+    <section
+      id={SECTION.sponsorship}
+      className="bg-[#e5e5e5] pt-14 px-6 md:px-12 pb-12 rounded-[36px] max-w-[1450px] mx-auto -mt-[30px] relative z-20 overflow-hidden"
+    >
       <div className="max-w-[1450px] mx-auto">
         {/* Header */}
         <div className="text-center mb-6 flex flex-col items-center">
@@ -151,7 +155,13 @@ export function SponsorshipSection() {
 
         {/* CTA Button */}
         <div className="text-center mb-8 mt-4">
-          <button className="bg-[#e98314] text-white border-none rounded-full py-3.5 px-10 inline-flex items-center justify-center cursor-pointer font-['Outfit',sans-serif] text-[13px] font-bold tracking-[0.05em] shadow-[0_4px_16px_rgba(233,131,20,0.3)] transition-all hover:bg-[#d07210] hover:-translate-y-[1px]">
+          <button
+            type="button"
+            onClick={() => {
+              window.location.href = SPONSORSHIP_MAILTO;
+            }}
+            className="bg-[#e98314] text-white border-none rounded-full py-3.5 px-10 inline-flex items-center justify-center cursor-pointer font-['Outfit',sans-serif] text-[13px] font-bold tracking-[0.05em] shadow-[0_4px_16px_rgba(233,131,20,0.3)] transition-all hover:bg-[#d07210] hover:-translate-y-[1px]"
+          >
             SPONSOR NOW
           </button>
         </div>

@@ -1,9 +1,11 @@
 
-import drumImg from '../assets/drum.png';
+import drumImg from '../assets/drum.webp';
+import { SECTION } from '../config/site';
+import { scrollToSection } from '../lib/navigation';
 
 export function CelebrateSection() {
   return (
-    <section className="bg-white max-w-full overflow-hidden">
+    <section id={SECTION.aboutEvent} className="bg-white max-w-full overflow-hidden">
       <div className="max-w-[1180px] mx-auto pt-14 pb-12 px-6">
         {/* ── Header ── */}
         <div className="text-center mb-10">
@@ -35,6 +37,10 @@ export function CelebrateSection() {
             <img
               src={drumImg}
               alt="Musical instruments"
+              width={544}
+              height={544}
+              loading="lazy"
+              decoding="async"
               className="w-[85%] h-[85%] object-contain"
             />
           </div>
@@ -68,13 +74,17 @@ export function CelebrateSection() {
                   Ticket price
                 </div>
                 <div className="font-['Outfit',sans-serif] text-[26px] font-extrabold text-[#e98314] leading-none">
-                  $1,00
+                  $100
                 </div>
               </div>
             </div>
 
             {/* Book button */}
-            <button className="bg-[#e98314] text-white border-none rounded-full py-2 px-2 pl-6 flex items-center justify-between w-full cursor-pointer font-['Outfit',sans-serif] text-[12px] font-extrabold tracking-[0.04em] shadow-[0_4px_16px_rgba(233,131,20,0.3)] transition-all duration-200 hover:bg-[#d07210] hover:-translate-y-[1px] group">
+            <button
+              type="button"
+              onClick={() => scrollToSection(SECTION.tickets)}
+              className="bg-[#e98314] text-white border-none rounded-full py-2 px-2 pl-6 flex items-center justify-between w-full cursor-pointer font-['Outfit',sans-serif] text-[12px] font-extrabold tracking-[0.04em] shadow-[0_4px_16px_rgba(233,131,20,0.3)] transition-all duration-200 hover:bg-[#d07210] hover:-translate-y-[1px] group"
+            >
               <span>BOOK YOUR TICKET NOW</span>
               <span className="bg-white rounded-full w-[36px] h-[36px] flex items-center justify-center shrink-0 ml-3">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#e98314" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="group-hover:translate-x-0.5 transition-transform duration-150">

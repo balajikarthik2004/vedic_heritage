@@ -1,16 +1,23 @@
 
-import heroBg from '../assets/hero_background.png';
-import artistsImg from '../assets/image 3.png';
-import logoImg from '../assets/logo.png';
+import heroBg from '../assets/hero_background.webp';
+import artistsImg from '../assets/image 3.webp';
+import logoImg from '../assets/logo.webp';
+import { SECTION } from '../config/site';
+import { scrollToSection } from '../lib/navigation';
 
 export function Hero() {
   return (
     <div className="bg-white">
       <section className="relative overflow-hidden w-full min-h-[680px] md:min-h-0 md:h-[580px]">
         {/* ── Background temple image ── */}
+        {/* Intrinsic size given so the browser reserves the box before decode.
+            The CSS below fully determines the rendered size either way. */}
         <img
           src={heroBg}
           alt=""
+          width={1344}
+          height={768}
+          fetchPriority="high"
           className="absolute inset-0 w-full h-full object-cover object-center"
         />
 
@@ -76,11 +83,20 @@ export function Hero() {
                 border: '6px solid #2b1a6d',
                 boxShadow: '0 0 48px rgba(0,0,0,0.6)',
               }}>
-              <img src={logoImg} alt="Vedic Heritage" className="w-full h-full object-contain" />
+              <img
+                src={logoImg}
+                alt="Vedic Heritage"
+                width={155}
+                height={156}
+                className="w-full h-full object-contain"
+              />
             </div>
 
             {/* BOOK NOW pill */}
-            <button className="bg-white border-none rounded-full flex items-center cursor-pointer transition-all duration-200 hover:-translate-y-0.5 group"
+            <button
+              type="button"
+              onClick={() => scrollToSection(SECTION.tickets)}
+              className="bg-white border-none rounded-full flex items-center cursor-pointer transition-all duration-200 hover:-translate-y-0.5 group"
               style={{
                 padding: '6px 6px 6px 22px',
                 gap: '14px',
@@ -105,6 +121,8 @@ export function Hero() {
           <img
             src={artistsImg}
             alt="Performing Artists"
+            width={1320}
+            height={482}
             style={{
               width: '100%',
               maxWidth: '1020px',
