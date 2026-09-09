@@ -1,5 +1,5 @@
 
-import { SECTION, SPONSORSHIP_MAILTO, SPONSORSHIP_SKUS } from '../config/site';
+import { SECTION, SPONSORSHIP_SKUS } from '../config/site';
 import { useCheckout } from '../lib/checkoutContext';
 import { formatMoney } from '../lib/payments';
 
@@ -97,7 +97,13 @@ const CORNERS_SWEEP_LEFT =
   'rounded-tl-[52px] rounded-tr-[6px] rounded-br-[32px] rounded-bl-[32px]';
 
 export function SponsorshipSection() {
-  const { openCheckout, isReady, getProduct } = useCheckout();
+  const { openCheckout, getProduct } = useCheckout();
+
+  // Tier the form opens on. The cards are a price list, not six buttons, so the
+  // one "Sponsor Now" has to start somewhere: `tiers` runs highest first, so
+  // this is the entry tier rather than a presumed big gift. Which tier is
+  // actually bought is chosen in the form's selector.
+  const defaultSponsorshipSku = tiers.at(-1)?.sku ?? SPONSORSHIP_SKUS.bronze;
 
   return (
     <section
@@ -127,10 +133,6 @@ export function SponsorshipSection() {
             const amountLabel = product
               ? formatMoney(product.unitAmountCents)
               : tier.amount;
-            // Tiers above the online ceiling are arranged by phone: a declined
-            // card on a five-figure gift is worse than a conversation.
-            const payableOnline = isReady && product?.onlineCheckout === true;
-
             return (
               <div
                 key={tier.id}
@@ -172,41 +174,23 @@ export function SponsorshipSection() {
                       </li>
                     ))}
                   </ul>
-
-                  {payableOnline ? (
-                    <button
-                      type="button"
-                      onClick={() => openCheckout(tier.sku)}
-                      className="mt-6 w-full rounded-full bg-[#e98314] py-2.5 font-['Outfit',sans-serif] text-[10px] font-bold uppercase tracking-[0.05em] text-white transition-all hover:bg-[#d07210] hover:-translate-y-[1px] cursor-pointer"
-                    >
-                      Sponsor {amountLabel}
-                    </button>
-                  ) : (
-                    <a
-                      href={SPONSORSHIP_MAILTO}
-                      className="mt-6 w-full rounded-full border border-[#e98314] py-2.5 text-center font-['Outfit',sans-serif] text-[10px] font-bold uppercase tracking-[0.05em] text-[#e98314] transition-all hover:bg-[#fff8f0]"
-                    >
-                      Contact us to sponsor
-                    </a>
-                  )}
                 </div>
               </div>
             );
           })}
         </div>
 
-        {/* Secondary CTA. Each tier card now carries its own action, so this is
-            the route for anyone who wants to talk it through first or give an
-            amount that is not one of the listed tiers. */}
+        {/* The single call to action for the whole section. The cards above
+            describe what each tier includes; the tier itself is chosen in the
+            form this opens. If the price list is unreachable the provider shows
+            the phone/email dialog, so this is never a dead button. */}
         <div className="text-center mb-8 mt-4">
           <button
             type="button"
-            onClick={() => {
-              window.location.href = SPONSORSHIP_MAILTO;
-            }}
+            onClick={() => openCheckout(defaultSponsorshipSku)}
             className="bg-[#e98314] text-white border-none rounded-full py-3.5 px-10 inline-flex items-center justify-center cursor-pointer font-['Outfit',sans-serif] text-[13px] font-bold tracking-[0.05em] shadow-[0_4px_16px_rgba(233,131,20,0.3)] transition-all hover:bg-[#d07210] hover:-translate-y-[1px]"
           >
-            ENQUIRE ABOUT SPONSORSHIP
+            SPONSOR NOW
           </button>
         </div>
 

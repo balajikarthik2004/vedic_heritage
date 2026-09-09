@@ -26,20 +26,19 @@ export interface CatalogueProduct {
   unitAmountCents: number;
   seatsPerUnit: number;
   maxQuantity: number;
-  /** False when the amount is too large to take by card and needs a call. */
-  onlineCheckout: boolean;
 }
 
 export interface Catalogue {
   currency: string;
   products: CatalogueProduct[];
-  capacity: { seatsRemaining: number | null; nearlyFull: boolean };
 }
 
 export interface CheckoutRequest {
   fullName: string;
   email: string;
   phone: string;
+  /** City and state. Collected for sponsorships, omitted for tickets. */
+  location?: string;
   sku: string;
   quantity: number;
   idempotencyKey: string;
@@ -118,10 +117,15 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 
   const text = await response.text();
   let payload: unknown;
+  let parsed = true;
   try {
     payload = text ? JSON.parse(text) : {};
   } catch {
+    // An unparseable body still has to be inspected for an error envelope
+    // below, so it becomes an empty object - but the flag records that there
+    // was nothing to read, because on a 2xx that is a failure, not a success.
     payload = {};
+    parsed = false;
   }
 
   if (!response.ok) {
@@ -129,7 +133,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     // buyer gets "Something went wrong" for a fixable typo:
     //
     //   { error, message }      - the payment handlers' own failures
-    //                             (unknown_sku, amount_requires_contact, ...)
+    //                             (unknown_sku, location_required, ...)
     //   { errorCode, hint }     - node-server-engine's error middleware, which
     //                             is what every request-validation rejection
     //                             and the 404 handler produce. For a validation
@@ -170,11 +174,38 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     );
   }
 
+  if (!parsed) {
+    // A 2xx carrying something that is not JSON means the request never
+    // reached the API - a dev server answering with index.html, or a proxy or
+    // captive portal in the way. Returning it as a value produced a page that
+    // believed it had a price list of `undefined`, where every call to action
+    // silently did nothing. Far better to fail here and let callers use their
+    // fallback path.
+    throw new ApiError(
+      'invalid_response',
+      'The server sent an unexpected response. Please try again.',
+      response.status
+    );
+  }
+
   return payload as T;
 }
 
-export function fetchCatalogue(): Promise<Catalogue> {
-  return apiFetch<Catalogue>('/payments/products');
+export async function fetchCatalogue(): Promise<Catalogue> {
+  const catalogue = await apiFetch<Catalogue>('/payments/products');
+
+  // Shape check, not paranoia: everything downstream treats a loaded catalogue
+  // as proof that a checkout can be started, so a response without a usable
+  // product array must be rejected rather than half-accepted.
+  if (!Array.isArray(catalogue?.products)) {
+    throw new ApiError(
+      'invalid_response',
+      'The price list could not be read. Please try again.',
+      200
+    );
+  }
+
+  return catalogue;
 }
 
 export function startCheckout(body: CheckoutRequest): Promise<CheckoutResponse> {

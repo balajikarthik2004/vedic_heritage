@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { CONTACT } from '../config/site';
 import {
   ApiError,
   formatMoney,
@@ -8,8 +7,16 @@ import {
 } from '../lib/payments';
 
 export interface CheckoutModalProps {
-  /** Product to buy. Null closes the modal. */
+  /** Product the form opens on. Null closes the modal. */
   product: CatalogueProduct | null;
+  /**
+   * Every sponsorship tier, highest first.
+   *
+   * Passed in rather than fetched here so the selector offers exactly the tiers
+   * the server prices, and a sponsor who opened the wrong card can switch tier
+   * without closing the form and losing what they have typed.
+   */
+  sponsorshipOptions?: CatalogueProduct[];
   onClose: () => void;
 }
 
@@ -17,6 +24,7 @@ interface FieldErrors {
   fullName?: string;
   email?: string;
   phone?: string;
+  location?: string;
   quantity?: string;
 }
 
@@ -31,7 +39,13 @@ const GOLD = '#e98314';
  * enforced at all.
  */
 function validate(
-  values: { fullName: string; email: string; phone: string; quantity: number },
+  values: {
+    fullName: string;
+    email: string;
+    phone: string;
+    location: string;
+    quantity: number;
+  },
   product: CatalogueProduct
 ): FieldErrors {
   const errors: FieldErrors = {};
@@ -65,6 +79,20 @@ function validate(
     errors.phone = 'Use digits, spaces, brackets, dots and dashes only.';
   }
 
+  // City and state are what recognition (plaques, the programme booklet) is
+  // printed with, so they are asked for on a sponsorship and left out of a
+  // plain ticket purchase, where they would be one more field for nothing.
+  if (product.kind === 'sponsorship') {
+    const location = values.location.trim();
+    if (location.length < 2) {
+      errors.location = 'Please enter your city and state.';
+    } else if (location.length > 160) {
+      errors.location = 'Please use 160 characters or fewer.';
+    } else if (/[\r\n\t<>]/.test(location)) {
+      errors.location = 'Please remove any special characters.';
+    }
+  }
+
   if (!Number.isInteger(values.quantity) || values.quantity < 1) {
     errors.quantity = 'Choose at least one.';
   } else if (values.quantity > product.maxQuantity) {
@@ -74,7 +102,11 @@ function validate(
   return errors;
 }
 
-export function CheckoutModal({ product, onClose }: CheckoutModalProps) {
+export function CheckoutModal({
+  product,
+  sponsorshipOptions = [],
+  onClose
+}: CheckoutModalProps) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const firstFieldRef = useRef<HTMLInputElement>(null);
@@ -83,11 +115,14 @@ export function CheckoutModal({ product, onClose }: CheckoutModalProps) {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [location, setLocation] = useState('');
+  // Which tier is being bought. Seeded from the card that opened the form and
+  // owned here, so switching tier re-prices the order without remounting.
+  const [selectedSku, setSelectedSku] = useState(product?.sku ?? '');
   const [quantity, setQuantity] = useState(1);
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const [needsContact, setNeedsContact] = useState(false);
 
   /**
    * Idempotency key, held stable for a given payload.
@@ -166,9 +201,21 @@ export function CheckoutModal({ product, onClose }: CheckoutModalProps) {
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [isOpen, submitting, onClose]);
 
+  // What is actually being bought: the tier chosen in the selector, falling
+  // back to the product the form was opened with. Everything below - the total,
+  // the validation rules, the SKU sent to the server - reads from this, so the
+  // amount on screen can never disagree with the tier selected.
+  const activeProduct = useMemo(() => {
+    if (!product) return null;
+    if (product.kind !== 'sponsorship') return product;
+    return (
+      sponsorshipOptions.find((option) => option.sku === selectedSku) ?? product
+    );
+  }, [product, sponsorshipOptions, selectedSku]);
+
   const totalCents = useMemo(
-    () => (product ? product.unitAmountCents * quantity : 0),
-    [product, quantity]
+    () => (activeProduct ? activeProduct.unitAmountCents * quantity : 0),
+    [activeProduct, quantity]
   );
 
   // Errors are computed during render rather than mirrored into state: they are
@@ -176,14 +223,16 @@ export function CheckoutModal({ product, onClose }: CheckoutModalProps) {
   // effect to keep the copy in step. Shown only after a first submit, so the
   // form does not scold anyone for a field they have not finished typing.
   const visibleErrors: FieldErrors =
-    submitted && product
-      ? validate({ fullName, email, phone, quantity }, product)
+    submitted && activeProduct
+      ? validate({ fullName, email, phone, location, quantity }, activeProduct)
       : {};
 
-  if (!product) return null;
+  if (!product || !activeProduct) return null;
 
-  const isTicket = product.kind === 'ticket';
-  const allowsQuantity = product.maxQuantity > 1;
+  const isTicket = activeProduct.kind === 'ticket';
+  const isSponsorship = activeProduct.kind === 'sponsorship';
+  const allowsQuantity = activeProduct.maxQuantity > 1;
+  const showTierSelect = isSponsorship && sponsorshipOptions.length > 1;
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -192,8 +241,8 @@ export function CheckoutModal({ product, onClose }: CheckoutModalProps) {
     setSubmitted(true);
     setFormError(null);
 
-    const values = { fullName, email, phone, quantity };
-    const found = validate(values, product);
+    const values = { fullName, email, phone, location, quantity };
+    const found = validate(values, activeProduct);
 
     if (Object.keys(found).length > 0) {
       // Move focus to the first problem so a screen reader announces it.
@@ -208,16 +257,20 @@ export function CheckoutModal({ product, onClose }: CheckoutModalProps) {
 
     try {
       const signature = JSON.stringify({
-        sku: product.sku,
+        sku: activeProduct.sku,
         quantity,
-        email: email.trim().toLowerCase()
+        email: email.trim().toLowerCase(),
+        location: location.trim()
       });
 
       const result = await startCheckout({
         fullName: fullName.trim(),
         email: email.trim().toLowerCase(),
         phone: phone.trim(),
-        sku: product.sku,
+        // Only sent where it is asked for, so a ticket buyer's order carries no
+        // empty string pretending to be an address.
+        location: isSponsorship ? location.trim() : undefined,
+        sku: activeProduct.sku,
         quantity,
         idempotencyKey: keyFor(signature)
       });
@@ -228,10 +281,6 @@ export function CheckoutModal({ product, onClose }: CheckoutModalProps) {
     } catch (error) {
       setSubmitting(false);
 
-      if (error instanceof ApiError && error.code === 'amount_requires_contact') {
-        setNeedsContact(true);
-        return;
-      }
       setFormError(
         error instanceof ApiError
           ? error.message
@@ -280,7 +329,7 @@ export function CheckoutModal({ product, onClose }: CheckoutModalProps) {
               {isTicket ? 'Book Your Tickets' : 'Confirm Your Sponsorship'}
             </h2>
             <p className="mt-1 font-['Outfit',sans-serif] text-[11px] text-[#FFF5ED]/80">
-              {product.label}
+              {activeProduct.label}
             </p>
           </div>
           <button
@@ -301,210 +350,238 @@ export function CheckoutModal({ product, onClose }: CheckoutModalProps) {
           </button>
         </div>
 
-        {needsContact ? (
-          /* Large sponsorships are arranged by phone: a declined $20,000 card
-             is a worse experience than a conversation. */
-          <div className="px-6 py-6">
-            <h3 className="font-['Outfit',sans-serif] text-sm font-bold text-gray-900">
-              Let us arrange this personally
-            </h3>
-            <p className="mt-2 font-['Outfit',sans-serif] text-[12px] leading-relaxed text-gray-600">
-              Sponsorships at this level are confirmed directly with our team so we
-              can arrange payment by cheque or bank transfer and record your
-              recognition details correctly.
-            </p>
-            <div className="mt-4 space-y-2 rounded-lg bg-[#fff8f0] p-4">
-              <a
-                href={`tel:${CONTACT.phone}`}
-                className="block font-['Outfit',sans-serif] text-[13px] font-bold text-[#4A0D12] hover:underline"
-              >
-                {CONTACT.phone}
-              </a>
-              <a
-                href={`mailto:${CONTACT.email}`}
-                className="block font-['Outfit',sans-serif] text-[13px] font-bold text-[#4A0D12] hover:underline"
-              >
-                {CONTACT.email}
-              </a>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="mt-5 w-full rounded-md py-2.5 font-['Outfit',sans-serif] text-xs font-bold uppercase tracking-wider text-white"
-              style={{ backgroundColor: GOLD }}
-            >
-              Close
-            </button>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} noValidate className="px-6 py-5">
-            <div className="space-y-4">
+        <form onSubmit={handleSubmit} noValidate className="px-6 py-5">
+          <div className="space-y-4">
+            {showTierSelect && (
               <div>
                 <label
-                  htmlFor="checkout-name"
+                  htmlFor="checkout-tier"
                   className="mb-1.5 block font-['Outfit',sans-serif] text-[11px] font-semibold uppercase tracking-wide text-gray-600"
                 >
-                  Full name
+                  Choose your sponsorship tier
                 </label>
-                <input
-                  ref={firstFieldRef}
-                  id="checkout-name"
-                  name="fullName"
-                  type="text"
-                  autoComplete="name"
-                  value={fullName}
-                  onChange={(event) => setFullName(event.target.value)}
-                  aria-invalid={Boolean(visibleErrors.fullName)}
-                  aria-describedby={
-                    visibleErrors.fullName ? 'checkout-name-error' : undefined
-                  }
-                  className={fieldClass(Boolean(visibleErrors.fullName))}
-                  placeholder="Your name"
-                />
-                {visibleErrors.fullName && (
-                  <p
-                    id="checkout-name-error"
-                    className="mt-1 font-['Outfit',sans-serif] text-[11px] text-red-600"
-                  >
-                    {visibleErrors.fullName}
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label
-                  htmlFor="checkout-email"
-                  className="mb-1.5 block font-['Outfit',sans-serif] text-[11px] font-semibold uppercase tracking-wide text-gray-600"
+                <select
+                  id="checkout-tier"
+                  name="sku"
+                  value={activeProduct.sku}
+                  onChange={(event) => setSelectedSku(event.target.value)}
+                  className={fieldClass(false)}
                 >
-                  Email
-                </label>
-                <input
-                  id="checkout-email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  inputMode="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  aria-invalid={Boolean(visibleErrors.email)}
-                  aria-describedby="checkout-email-hint"
-                  className={fieldClass(Boolean(visibleErrors.email))}
-                  placeholder="you@example.com"
-                />
-                <p
-                  id="checkout-email-hint"
-                  className="mt-1 font-['Outfit',sans-serif] text-[11px] text-gray-500"
-                >
-                  {visibleErrors.email ? (
-                    <span className="text-red-600">{visibleErrors.email}</span>
-                  ) : (
-                    'Your receipt and confirmation are sent here.'
-                  )}
+                  {sponsorshipOptions.map((option) => (
+                    <option key={option.sku} value={option.sku}>
+                      {/* Amounts come from the same server catalogue that prices
+                          the order, so the label cannot drift from the charge. */}
+                      {option.label} - {formatMoney(option.unitAmountCents)}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 font-['Outfit',sans-serif] text-[11px] text-gray-500">
+                  {activeProduct.seatsPerUnit} complimentary seat
+                  {activeProduct.seatsPerUnit === 1 ? '' : 's'} included.
                 </p>
               </div>
+            )}
 
-              <div>
-                <label
-                  htmlFor="checkout-phone"
-                  className="mb-1.5 block font-['Outfit',sans-serif] text-[11px] font-semibold uppercase tracking-wide text-gray-600"
+            <div>
+              <label
+                htmlFor="checkout-name"
+                className="mb-1.5 block font-['Outfit',sans-serif] text-[11px] font-semibold uppercase tracking-wide text-gray-600"
+              >
+                Full name
+              </label>
+              <input
+                ref={firstFieldRef}
+                id="checkout-name"
+                name="fullName"
+                type="text"
+                autoComplete="name"
+                value={fullName}
+                onChange={(event) => setFullName(event.target.value)}
+                aria-invalid={Boolean(visibleErrors.fullName)}
+                aria-describedby={
+                  visibleErrors.fullName ? 'checkout-name-error' : undefined
+                }
+                className={fieldClass(Boolean(visibleErrors.fullName))}
+                placeholder="Your name"
+              />
+              {visibleErrors.fullName && (
+                <p
+                  id="checkout-name-error"
+                  className="mt-1 font-['Outfit',sans-serif] text-[11px] text-red-600"
                 >
-                  Phone
-                </label>
-                <input
-                  id="checkout-phone"
-                  name="phone"
-                  type="tel"
-                  autoComplete="tel"
-                  inputMode="tel"
-                  value={phone}
-                  onChange={(event) => setPhone(event.target.value)}
-                  aria-invalid={Boolean(visibleErrors.phone)}
-                  aria-describedby={
-                    visibleErrors.phone ? 'checkout-phone-error' : undefined
-                  }
-                  className={fieldClass(Boolean(visibleErrors.phone))}
-                  placeholder="+1 631 555 0123"
-                />
-                {visibleErrors.phone && (
-                  <p
-                    id="checkout-phone-error"
-                    className="mt-1 font-['Outfit',sans-serif] text-[11px] text-red-600"
-                  >
-                    {visibleErrors.phone}
-                  </p>
-                )}
-              </div>
-
-              {allowsQuantity && (
-                <div>
-                  <label
-                    htmlFor="checkout-quantity"
-                    className="mb-1.5 block font-['Outfit',sans-serif] text-[11px] font-semibold uppercase tracking-wide text-gray-600"
-                  >
-                    Number of tickets
-                  </label>
-                  <select
-                    id="checkout-quantity"
-                    name="quantity"
-                    value={quantity}
-                    onChange={(event) => setQuantity(Number(event.target.value))}
-                    className={fieldClass(Boolean(visibleErrors.quantity))}
-                  >
-                    {Array.from({ length: product.maxQuantity }, (_, index) => (
-                      <option key={index + 1} value={index + 1}>
-                        {index + 1}
-                      </option>
-                    ))}
-                  </select>
-                  {visibleErrors.quantity && (
-                    <p className="mt-1 font-['Outfit',sans-serif] text-[11px] text-red-600">
-                      {visibleErrors.quantity}
-                    </p>
-                  )}
-                </div>
+                  {visibleErrors.fullName}
+                </p>
               )}
             </div>
 
-            {/* Total. Shown from the server-provided unit price, so it always
-                matches what will actually be charged. */}
-            <div className="mt-5 flex items-baseline justify-between rounded-lg bg-[#fff8f0] px-4 py-3">
-              <span className="font-['Outfit',sans-serif] text-[11px] font-semibold uppercase tracking-wide text-gray-600">
-                Total
-              </span>
-              <span
-                className="font-['Outfit',sans-serif] text-xl font-extrabold"
-                style={{ color: GOLD }}
+            <div>
+              <label
+                htmlFor="checkout-email"
+                className="mb-1.5 block font-['Outfit',sans-serif] text-[11px] font-semibold uppercase tracking-wide text-gray-600"
               >
-                {formatMoney(totalCents)}
-              </span>
+                Email
+              </label>
+              <input
+                id="checkout-email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                inputMode="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                aria-invalid={Boolean(visibleErrors.email)}
+                aria-describedby="checkout-email-hint"
+                className={fieldClass(Boolean(visibleErrors.email))}
+                placeholder="you@example.com"
+              />
+              <p
+                id="checkout-email-hint"
+                className="mt-1 font-['Outfit',sans-serif] text-[11px] text-gray-500"
+              >
+                {visibleErrors.email ? (
+                  <span className="text-red-600">{visibleErrors.email}</span>
+                ) : (
+                  'Your receipt and confirmation are sent here.'
+                )}
+              </p>
             </div>
 
-            {formError && (
-              <p
-                role="alert"
-                className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 font-['Outfit',sans-serif] text-[12px] text-red-700"
+            <div>
+              <label
+                htmlFor="checkout-phone"
+                className="mb-1.5 block font-['Outfit',sans-serif] text-[11px] font-semibold uppercase tracking-wide text-gray-600"
               >
-                {formError}
-              </p>
+                Phone
+              </label>
+              <input
+                id="checkout-phone"
+                name="phone"
+                type="tel"
+                autoComplete="tel"
+                inputMode="tel"
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+                aria-invalid={Boolean(visibleErrors.phone)}
+                aria-describedby={
+                  visibleErrors.phone ? 'checkout-phone-error' : undefined
+                }
+                className={fieldClass(Boolean(visibleErrors.phone))}
+                placeholder="+1 631 555 0123"
+              />
+              {visibleErrors.phone && (
+                <p
+                  id="checkout-phone-error"
+                  className="mt-1 font-['Outfit',sans-serif] text-[11px] text-red-600"
+                >
+                  {visibleErrors.phone}
+                </p>
+              )}
+            </div>
+
+            {isSponsorship && (
+              <div>
+                <label
+                  htmlFor="checkout-location"
+                  className="mb-1.5 block font-['Outfit',sans-serif] text-[11px] font-semibold uppercase tracking-wide text-gray-600"
+                >
+                  Location
+                </label>
+                <input
+                  id="checkout-location"
+                  name="location"
+                  type="text"
+                  autoComplete="address-level2"
+                  value={location}
+                  onChange={(event) => setLocation(event.target.value)}
+                  aria-invalid={Boolean(visibleErrors.location)}
+                  aria-describedby="checkout-location-hint"
+                  className={fieldClass(Boolean(visibleErrors.location))}
+                  placeholder="Hicksville, NY"
+                />
+                <p
+                  id="checkout-location-hint"
+                  className="mt-1 font-['Outfit',sans-serif] text-[11px] text-gray-500"
+                >
+                  {visibleErrors.location ? (
+                    <span className="text-red-600">
+                      {visibleErrors.location}
+                    </span>
+                  ) : (
+                    'City and state, used for your sponsor recognition.'
+                  )}
+                </p>
+              </div>
             )}
 
-            <button
-              type="submit"
-              disabled={submitting}
-              className="mt-5 w-full rounded-md py-3 font-['Outfit',sans-serif] text-xs font-bold uppercase tracking-wider text-white shadow-lg transition disabled:cursor-not-allowed disabled:opacity-60"
-              style={{ backgroundColor: submitting ? '#9ca3af' : GOLD }}
-            >
-              {submitting
-                ? 'Taking you to secure payment...'
-                : `Continue to secure payment`}
-            </button>
+            {allowsQuantity && (
+              <div>
+                <label
+                  htmlFor="checkout-quantity"
+                  className="mb-1.5 block font-['Outfit',sans-serif] text-[11px] font-semibold uppercase tracking-wide text-gray-600"
+                >
+                  Number of tickets
+                </label>
+                <select
+                  id="checkout-quantity"
+                  name="quantity"
+                  value={quantity}
+                  onChange={(event) => setQuantity(Number(event.target.value))}
+                  className={fieldClass(Boolean(visibleErrors.quantity))}
+                >
+                  {Array.from({ length: activeProduct.maxQuantity }, (_, index) => (
+                    <option key={index + 1} value={index + 1}>
+                      {index + 1}
+                    </option>
+                  ))}
+                </select>
+                {visibleErrors.quantity && (
+                  <p className="mt-1 font-['Outfit',sans-serif] text-[11px] text-red-600">
+                    {visibleErrors.quantity}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
 
-            <p className="mt-3 text-center font-['Outfit',sans-serif] text-[10px] leading-relaxed text-gray-500">
-              Payment is completed on Square&rsquo;s secure checkout page. Your card
-              details are never entered on, or stored by, this website.
+          {/* Total. Shown from the server-provided unit price, so it always
+              matches what will actually be charged. */}
+          <div className="mt-5 flex items-baseline justify-between rounded-lg bg-[#fff8f0] px-4 py-3">
+            <span className="font-['Outfit',sans-serif] text-[11px] font-semibold uppercase tracking-wide text-gray-600">
+              Total
+            </span>
+            <span
+              className="font-['Outfit',sans-serif] text-xl font-extrabold"
+              style={{ color: GOLD }}
+            >
+              {formatMoney(totalCents)}
+            </span>
+          </div>
+
+          {formError && (
+            <p
+              role="alert"
+              className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 font-['Outfit',sans-serif] text-[12px] text-red-700"
+            >
+              {formError}
             </p>
-          </form>
-        )}
+          )}
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="mt-5 w-full rounded-md py-3 font-['Outfit',sans-serif] text-xs font-bold uppercase tracking-wider text-white shadow-lg transition disabled:cursor-not-allowed disabled:opacity-60"
+            style={{ backgroundColor: submitting ? '#9ca3af' : GOLD }}
+          >
+            {submitting
+              ? 'Taking you to secure payment...'
+              : 'Continue to secure payment'}
+          </button>
+
+          <p className="mt-3 text-center font-['Outfit',sans-serif] text-[10px] leading-relaxed text-gray-500">
+            Payment is completed on Square&rsquo;s secure checkout page. Your card
+            details are never entered on, or stored by, this website.
+          </p>
+        </form>
       </div>
     </div>
   );

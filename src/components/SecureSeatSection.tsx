@@ -1,6 +1,6 @@
 import React from 'react';
 import hanumanImg from '../assets/hanuman-mandir.webp';
-import { SECTION, SPONSORSHIP_MAILTO, TICKET_SKU, ticketDestination } from '../config/site';
+import { BOOKING, SECTION, SPONSORSHIP_MAILTO, TICKET_SKU } from '../config/site';
 import { useCheckout } from '../lib/checkoutContext';
 import { formatMoney } from '../lib/payments';
 
@@ -15,45 +15,24 @@ export const SecureSeatSection: React.FC<SecureSeatSectionProps> = ({
   onPurchaseTicket,
   onContactSponsorship,
 }) => {
-  const { openCheckout, isReady, getProduct, capacity } = useCheckout();
+  const { openCheckout, getProduct } = useCheckout();
 
   // Price comes from the server when available so the button can never advertise
   // an amount different from the one that gets charged.
   const ticket = getProduct(TICKET_SKU);
   const priceLabel = ticket ? formatMoney(ticket.unitAmountCents) : '$100';
 
-  /**
-   * Live seat availability.
-   *
-   * Currently switched OFF: flip `SHOW_SEATS_REMAINING` to true to bring the
-   * badge back. Kept as a flag rather than commented-out JSX because
-   * `noUnusedLocals` is on, so commenting the markup alone would fail the build
-   * on `capacity`, `seatsLeft` and `showSeatsLeft` going unused.
-   *
-   * When on, it renders only where the server actually has a capacity
-   * configured and seats genuinely remain. `seatsRemaining` is null when
-   * EVENT_SEAT_CAPACITY is unset, and the cap is soft so it can reach zero or
-   * below without blocking a sale - in either case nothing is claimed rather
-   * than something misleading. An inaccurate scarcity message on a fundraising
-   * page is worse than none.
-   */
-  const SHOW_SEATS_REMAINING: boolean = false;
-
-  const seatsLeft = capacity?.seatsRemaining ?? null;
-  const showSeatsLeft =
-    SHOW_SEATS_REMAINING && seatsLeft !== null && seatsLeft > 0;
-
-  // These two are the end of the booking funnel, so they fall back to a real
-  // destination rather than doing nothing when no handler is supplied. If the
-  // payments API is unreachable, the pre-filled email path still works.
+  // End of the booking funnel, so it always leads somewhere: an external
+  // ticketing page when one is configured, otherwise the checkout form - and
+  // the provider falls back to the phone/email dialog if that form cannot open.
   const purchaseTicket =
     onPurchaseTicket ??
     (() => {
-      if (isReady) {
-        openCheckout(TICKET_SKU);
+      if (BOOKING.ticketUrl) {
+        window.location.href = BOOKING.ticketUrl;
         return;
       }
-      window.location.href = ticketDestination();
+      openCheckout(TICKET_SKU);
     });
 
   const contactSponsorship =
@@ -106,33 +85,6 @@ export const SecureSeatSection: React.FC<SecureSeatSectionProps> = ({
               disappointment and book your tickets or secure a sponsorship early to support the
               building project.
             </p>
-
-            {/* Live seat availability. Currently off - see
-                SHOW_SEATS_REMAINING above. When on, absent entirely unless the
-                server has a real capacity configured and seats remain. */}
-            {showSeatsLeft && (
-              <div
-                className="mt-5 inline-flex items-center gap-2 rounded-full border px-4 py-1.5"
-                style={{
-                  borderColor: capacity?.nearlyFull ? '#FFD238' : '#D1B280',
-                  backgroundColor: capacity?.nearlyFull
-                    ? 'rgba(255,210,56,0.14)'
-                    : 'rgba(255,255,255,0.08)'
-                }}
-                aria-live="polite"
-              >
-                <span
-                  className="inline-block h-1.5 w-1.5 rounded-full"
-                  style={{ backgroundColor: capacity?.nearlyFull ? '#FFD238' : '#D1B280' }}
-                  aria-hidden="true"
-                />
-                <span className="font-['Outfit',sans-serif] text-[10px] sm:text-[11px] font-semibold tracking-wide text-[#FFF5ED]">
-                  {capacity?.nearlyFull
-                    ? `Almost full — only ${seatsLeft} ${seatsLeft === 1 ? 'seat' : 'seats'} left`
-                    : `${seatsLeft} ${seatsLeft === 1 ? 'seat' : 'seats'} still available`}
-                </span>
-              </div>
-            )}
 
             {/* Action Buttons */}
             <div className="mt-6 sm:mt-8 flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-5">
