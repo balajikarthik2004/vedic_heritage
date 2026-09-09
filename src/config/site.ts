@@ -34,18 +34,56 @@ export const CONTACT = {
 } as const;
 
 /**
- * Where the ticket and sponsorship buttons should send people.
+ * Product identifiers understood by the payments API.
  *
- * `ticketUrl` is null because this build has no payment provider wired up. While
- * it is null every "book" button scrolls to the tickets section and the final
- * purchase button opens a pre-filled email, which are both real, working paths.
- *
- * To switch on real checkout, set `ticketUrl` to the Eventbrite / Zelle / PayPal
- * link and every booking button follows automatically - no component changes.
+ * These are keys, NOT prices. The server holds the only authoritative price
+ * list (see `src/config/payments.ts` in the backend) and the browser never
+ * sends an amount, so a tampered client cannot change what is charged. The
+ * amounts shown on the page are fetched from the API at runtime.
  */
-export const BOOKING: { ticketUrl: string | null; websiteUrl: string | null } = {
+export const TICKET_SKU = 'ticket-general';
+
+/** Sponsorship tier SKUs, highest first, matching the backend catalogue. */
+export const SPONSORSHIP_SKUS = {
+  palladium: 'sponsor-palladium',
+  platinum: 'sponsor-platinum',
+  diamond: 'sponsor-diamond',
+  gold: 'sponsor-gold',
+  silver: 'sponsor-silver',
+  bronze: 'sponsor-bronze',
+} as const;
+
+/**
+ * The organisation's main website.
+ *
+ * This event site is a standalone single page; "Explore Vedic Heritage" sends
+ * visitors to the main site for everything outside the fundraiser - temple
+ * timings, daily worship, other programmes.
+ */
+export const ORG_WEBSITE_URL = 'https://vedicheritage-inc.org/';
+
+/**
+ * Build a link into the main site.
+ *
+ * Every one of these was verified to return 200 at the time of writing. They
+ * are the main site's own footer destinations, which is why the labels here
+ * match it so closely - this page's footer was copied from it, but had been
+ * left pointing at in-page anchors that did not exist.
+ */
+export const orgUrl = (path: string) =>
+  `${ORG_WEBSITE_URL.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
+
+/**
+ * Fallback destination for when the payments API cannot be reached.
+ *
+ * Online checkout is handled by the payments API, not by a link here. This
+ * remains as the graceful-degradation path: if the API is unreachable, booking
+ * buttons fall back to the pre-filled email below rather than becoming dead
+ * ends. Setting `ticketUrl` still overrides the final purchase button if the
+ * event ever needs to point at an external ticketing page instead.
+ */
+export const BOOKING: { ticketUrl: string | null } = {
   ticketUrl: null,
-  websiteUrl: null,
 };
 
 const mailto = (subject: string, body?: string) =>

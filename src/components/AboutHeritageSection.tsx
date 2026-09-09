@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ArrowRight } from 'lucide-react';
-import { SECTION, BOOKING } from '../config/site';
-import { scrollToSection } from '../lib/navigation';
+import { SECTION, ORG_WEBSITE_URL } from '../config/site';
 
 /**
  * Carousel images. Every file dropped into src/assets/slide is picked up here
@@ -90,15 +89,21 @@ export const AboutHeritageSection: React.FC<AboutHeritageSectionProps> = ({
     [show]
   );
 
-  const handleExplore =
-    onExploreClick ??
-    (() => {
-      if (BOOKING.websiteUrl) {
-        window.open(BOOKING.websiteUrl, '_blank', 'noopener,noreferrer');
-        return;
+  /**
+   * "Explore Vedic Heritage" is a real external link, so it is an anchor rather
+   * than a button with `window.open` - that keeps ctrl/middle-click, the
+   * right-click "open in new tab" menu and the status-bar URL preview working,
+   * none of which a scripted open provides.
+   *
+   * The optional `onExploreClick` prop still wins if a caller supplies one: it
+   * suppresses the navigation and runs instead.
+   */
+  const handleExplore = onExploreClick
+    ? (event: React.MouseEvent<HTMLAnchorElement>) => {
+        event.preventDefault();
+        onExploreClick();
       }
-      scrollToSection(SECTION.contact);
-    });
+    : undefined;
 
   const highlights = [
     'Daily Arti',
@@ -280,14 +285,16 @@ export const AboutHeritageSection: React.FC<AboutHeritageSectionProps> = ({
 
               {/* Explore Button */}
               <div className="pt-2">
-                <button
-                  type="button"
+                <a
+                  href={ORG_WEBSITE_URL}
+                  target="_blank"
+                  rel="noreferrer"
                   onClick={handleExplore}
                   className="group inline-flex items-center justify-center gap-2.5 bg-[#ED7E00] hover:bg-[#D96B00] text-[#FFFFFF] font-bold text-xs sm:text-sm uppercase tracking-wider px-5 sm:px-7 py-3.5 rounded-[14px] shadow-md hover:shadow-lg transform active:scale-98 transition-all duration-200 cursor-pointer"
                 >
                   <span className="whitespace-nowrap">EXPLORE VEDIC HERITAGE</span>
                   <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-                </button>
+                </a>
               </div>
             </div>
 

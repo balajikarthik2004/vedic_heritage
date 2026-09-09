@@ -1,9 +1,16 @@
 
-import { SECTION, SPONSORSHIP_MAILTO } from '../config/site';
+import { SECTION, SPONSORSHIP_MAILTO, SPONSORSHIP_SKUS } from '../config/site';
+import { useCheckout } from '../lib/checkoutContext';
+import { formatMoney } from '../lib/payments';
 
+// `amount` is the design fallback shown before the price list loads. The server
+// is the authority on price, so once the catalogue arrives the amount rendered
+// comes from it - the page can never advertise a figure that differs from what
+// is actually charged.
 const tiers = [
   {
     id: 1,
+    sku: SPONSORSHIP_SKUS.palladium,
     label: 'PALLADIUM SPONSOR',
     amount: '$20,000',
     color: '#e98314',
@@ -16,6 +23,7 @@ const tiers = [
   },
   {
     id: 2,
+    sku: SPONSORSHIP_SKUS.platinum,
     label: 'PLATINUM SPONSOR',
     amount: '$15,000',
     color: '#e98314',
@@ -28,6 +36,7 @@ const tiers = [
   },
   {
     id: 3,
+    sku: SPONSORSHIP_SKUS.diamond,
     label: 'DIAMOND SPONSOR',
     amount: '$10,000',
     color: '#e98314',
@@ -40,6 +49,7 @@ const tiers = [
   },
   {
     id: 4,
+    sku: SPONSORSHIP_SKUS.gold,
     label: 'GOLD SPONSOR',
     amount: '$5,000',
     color: '#e98314',
@@ -52,6 +62,7 @@ const tiers = [
   },
   {
     id: 5,
+    sku: SPONSORSHIP_SKUS.silver,
     label: 'SILVER SPONSOR',
     amount: '$3,000',
     color: '#e98314',
@@ -64,6 +75,7 @@ const tiers = [
   },
   {
     id: 6,
+    sku: SPONSORSHIP_SKUS.bronze,
     label: 'BRONZE SPONSOR',
     amount: '$1,000',
     color: '#e98314',
@@ -85,6 +97,8 @@ const CORNERS_SWEEP_LEFT =
   'rounded-tl-[52px] rounded-tr-[6px] rounded-br-[32px] rounded-bl-[32px]';
 
 export function SponsorshipSection() {
+  const { openCheckout, isReady, getProduct } = useCheckout();
+
   return (
     <section
       id={SECTION.sponsorship}
@@ -107,53 +121,83 @@ export function SponsorshipSection() {
 
         {/* Tier Cards Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-12">
-          {tiers.map((tier, index) => (
-            <div
-              key={tier.id}
-              className={`bg-white overflow-hidden shadow-[0_4px_16px_rgba(0,0,0,0.06)] ${
-                index % 2 === 0 ? CORNERS_SWEEP_RIGHT : CORNERS_SWEEP_LEFT
-              }`}
-            >
-              {/* No radii here on purpose: the card's overflow-hidden clips the header to
-                  whichever corner variant that card uses, so the two cannot drift apart. */}
-              <div className="bg-[#1e293b] py-2 px-10">
-                <div className="font-['Outfit',sans-serif] text-[9.5px] font-bold tracking-[0.05em] uppercase text-white">
-                  {tier.label}
+          {tiers.map((tier, index) => {
+            const product = getProduct(tier.sku);
+            // Server price wins over the design fallback once loaded.
+            const amountLabel = product
+              ? formatMoney(product.unitAmountCents)
+              : tier.amount;
+            // Tiers above the online ceiling are arranged by phone: a declined
+            // card on a five-figure gift is worse than a conversation.
+            const payableOnline = isReady && product?.onlineCheckout === true;
+
+            return (
+              <div
+                key={tier.id}
+                className={`bg-white overflow-hidden shadow-[0_4px_16px_rgba(0,0,0,0.06)] flex flex-col ${
+                  index % 2 === 0 ? CORNERS_SWEEP_RIGHT : CORNERS_SWEEP_LEFT
+                }`}
+              >
+                {/* No radii here on purpose: the card's overflow-hidden clips the header to
+                    whichever corner variant that card uses, so the two cannot drift apart. */}
+                <div className="bg-[#1e293b] py-2 px-10">
+                  <div className="font-['Outfit',sans-serif] text-[9.5px] font-bold tracking-[0.05em] uppercase text-white">
+                    {tier.label}
+                  </div>
                 </div>
-              </div>
 
-              <div className="px-10 pb-10 pt-6">
-                {/* Amount */}
-                <div
-                  className="font-['Outfit',sans-serif] text-[28px] font-extrabold mb-6"
-                  style={{ color: tier.color }}
-                >
-                  {tier.amount}
-                </div>
+                <div className="px-10 pb-8 pt-6 flex flex-col grow">
+                  {/* Amount */}
+                  <div
+                    className="font-['Outfit',sans-serif] text-[28px] font-extrabold mb-6"
+                    style={{ color: tier.color }}
+                  >
+                    {amountLabel}
+                  </div>
 
-                {/* Divider */}
-                <div className="h-px bg-gray-100 mb-5" />
+                  {/* Divider */}
+                  <div className="h-px bg-gray-100 mb-5" />
 
-                {/* Perks */}
-                <ul className="m-0 p-0 list-none flex flex-col gap-3">
-                  {tier.perks.map((perk, i) => (
-                    <li
-                      key={i}
-                      className="flex items-start gap-2.5 font-['Outfit',sans-serif] text-[9.5px] font-semibold text-gray-600 leading-[1.4]"
+                  {/* Perks */}
+                  <ul className="m-0 p-0 list-none flex flex-col gap-3 grow">
+                    {tier.perks.map((perk, i) => (
+                      <li
+                        key={i}
+                        className="flex items-start gap-2.5 font-['Outfit',sans-serif] text-[9.5px] font-semibold text-gray-600 leading-[1.4]"
+                      >
+                        <span className="text-[12px] leading-none shrink-0 text-[#e98314] mt-px">
+                          ✓
+                        </span>
+                        {perk}
+                      </li>
+                    ))}
+                  </ul>
+
+                  {payableOnline ? (
+                    <button
+                      type="button"
+                      onClick={() => openCheckout(tier.sku)}
+                      className="mt-6 w-full rounded-full bg-[#e98314] py-2.5 font-['Outfit',sans-serif] text-[10px] font-bold uppercase tracking-[0.05em] text-white transition-all hover:bg-[#d07210] hover:-translate-y-[1px] cursor-pointer"
                     >
-                      <span className="text-[12px] leading-none shrink-0 text-[#e98314] mt-px">
-                        ✓
-                      </span>
-                      {perk}
-                    </li>
-                  ))}
-                </ul>
+                      Sponsor {amountLabel}
+                    </button>
+                  ) : (
+                    <a
+                      href={SPONSORSHIP_MAILTO}
+                      className="mt-6 w-full rounded-full border border-[#e98314] py-2.5 text-center font-['Outfit',sans-serif] text-[10px] font-bold uppercase tracking-[0.05em] text-[#e98314] transition-all hover:bg-[#fff8f0]"
+                    >
+                      Contact us to sponsor
+                    </a>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
-        {/* CTA Button */}
+        {/* Secondary CTA. Each tier card now carries its own action, so this is
+            the route for anyone who wants to talk it through first or give an
+            amount that is not one of the listed tiers. */}
         <div className="text-center mb-8 mt-4">
           <button
             type="button"
@@ -162,7 +206,7 @@ export function SponsorshipSection() {
             }}
             className="bg-[#e98314] text-white border-none rounded-full py-3.5 px-10 inline-flex items-center justify-center cursor-pointer font-['Outfit',sans-serif] text-[13px] font-bold tracking-[0.05em] shadow-[0_4px_16px_rgba(233,131,20,0.3)] transition-all hover:bg-[#d07210] hover:-translate-y-[1px]"
           >
-            SPONSOR NOW
+            ENQUIRE ABOUT SPONSORSHIP
           </button>
         </div>
 

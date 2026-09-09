@@ -1,6 +1,6 @@
 import React from 'react';
 import { ChevronUp } from 'lucide-react';
-import { CONTACT, MAP_URL, SECTION, VOLUNTEER_MAILTO } from '../config/site';
+import { CONTACT, MAP_URL, SECTION, VOLUNTEER_MAILTO, orgUrl } from '../config/site';
 import { scrollToSection, scrollToTop } from '../lib/navigation';
 
 interface FooterLink {
@@ -12,55 +12,58 @@ interface FooterLink {
 /**
  * Footer navigation.
  *
- * Every entry previously pointed at an id derived from its own label
- * (`#for-shiv-abhishek`, `#privacy-policy`, ...), none of which existed on the
- * page, so all nineteen links were dead. They now resolve to the section that
- * actually carries the content.
+ * This footer was copied from the main site, so every label describes a page
+ * that exists over there - but the hrefs had been left as in-page anchors
+ * derived from the labels (`#for-shiv-abhishek`, `#privacy-policy`, ...), none
+ * of which exist on this single page. So they now point at the real pages on
+ * the main site, which the renderer opens in a new tab (it adds
+ * target/rel to any `http` href), keeping the buyer's checkout tab intact.
  *
- * This is a single page, so the labels describing content that has no home yet -
- * the individual poojas, the individual festival dates - point at the contact
- * block, which is where a visitor can act on them. Anything with a real
- * destination (Sponsorship, Gallery, Map, Volunteering) goes straight there.
+ * The two exceptions are deliberate: `Sponsorship` stays an in-page anchor
+ * because it means THIS fundraiser's tiers, not the main site's donations page,
+ * and `Volunteering` stays a mailto because there is no page to send it to.
  */
 const FOOTER_COLUMNS: { title: string; links: FooterLink[] }[] = [
   {
     title: 'More Info',
     links: [
-      { label: 'Daily Program', href: `#${SECTION.about}` },
-      { label: 'Events', href: `#${SECTION.aboutEvent}` },
-      { label: 'Gallery', href: `#${SECTION.community}` },
-      { label: 'Donations', href: `#${SECTION.sponsorship}` },
-      { label: 'Contact', href: `#${SECTION.contact}` },
+      { label: 'Daily Program', href: orgUrl('daily-program/') },
+      { label: 'Events', href: orgUrl('events/') },
+      { label: 'Gallery', href: orgUrl('gallery/') },
+      { label: 'Donations', href: orgUrl('donations/') },
+      { label: 'Contact', href: orgUrl('contact/') },
     ],
   },
   {
     title: 'Poojas & Services',
     links: [
-      { label: 'For Shantipath with Prasad', href: `#${SECTION.contact}` },
-      { label: 'For Chowki with Prasad', href: `#${SECTION.contact}` },
-      { label: 'For Car puja', href: `#${SECTION.contact}` },
-      { label: 'For Shiv Abhishek', href: `#${SECTION.contact}` },
+      { label: 'For Shantipath with Prasad', href: orgUrl('product/for-shantipath-with-prasad/') },
+      { label: 'For Chowki with Prasad', href: orgUrl('product/for-chowki-with-prasad/') },
+      { label: 'For Car puja', href: orgUrl('product/for-car-puja/') },
+      { label: 'For Shiv Abhishek', href: orgUrl('product/for-shiv-abhishek/') },
     ],
   },
   {
+    // These are individual dated instances on the main site, so the slugs carry
+    // a counter (`pradosh-vrat-20`) and will eventually point at a past date.
+    // The Events page above is the durable link if they need replacing.
     title: 'Our Events',
     links: [
-      { label: 'Varuthini Ekadashi', href: `#${SECTION.aboutEvent}` },
-      { label: 'Pradosh Vrat', href: `#${SECTION.aboutEvent}` },
-      { label: 'Amavasya', href: `#${SECTION.aboutEvent}` },
-      { label: 'Akshaya Tritiya', href: `#${SECTION.aboutEvent}` },
+      { label: 'Varuthini Ekadashi', href: orgUrl('events/varuthini-ekadashi/') },
+      { label: 'Pradosh Vrat', href: orgUrl('events/pradosh-vrat-20/') },
+      { label: 'Amavasya', href: orgUrl('events/amavasya-9/') },
+      { label: 'Akshaya Tritiya', href: orgUrl('events/akshaya-tritiya/') },
     ],
   },
   {
     title: 'Quick Links',
     links: [
-      { label: 'History Of temple', href: `#${SECTION.about}` },
+      { label: 'History Of temple', href: orgUrl('history/') },
       { label: 'Map', href: MAP_URL },
-      // TODO: both of these need their own page before launch - a site taking
-      // donations is expected to publish them. Pointed at the contact block for
-      // now so they are not dead links.
-      { label: 'Privacy Policy', href: `#${SECTION.contact}` },
-      { label: 'Terms Of Use', href: `#${SECTION.contact}` },
+      // The main site publishes both, which a site taking donations is expected
+      // to have - so these use its pages rather than needing their own here.
+      { label: 'Privacy Policy', href: orgUrl('privacy-policy/') },
+      { label: 'Terms Of Use', href: orgUrl('terms-of-use/') },
     ],
   },
   {
