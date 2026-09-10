@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import logoImg from '../assets/logo.webp';
 import { SECTION } from '../config/site';
+import { useBookTickets } from '../lib/booking';
 import { scrollToSection, useActiveSection } from '../lib/navigation';
 
 const NAV_LINKS = [
@@ -16,6 +17,7 @@ const NAV_SECTIONS = NAV_LINKS.map((l) => l.section);
 export function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const activeSection = useActiveSection(NAV_SECTIONS);
+  const bookTickets = useBookTickets();
 
   /**
    * Real hrefs are kept on the anchors so the links remain middle-clickable and
@@ -28,9 +30,17 @@ export function Navbar() {
     scrollToSection(section);
   };
 
+  /**
+   * Open the ticket form.
+   *
+   * Previously this scrolled to the tickets section, so the button furthest up
+   * the page - and the one most visitors reach for first - did not actually
+   * start a booking. The mobile menu is closed first, or the form would open
+   * behind it.
+   */
   const handleBookNow = () => {
     setMenuOpen(false);
-    scrollToSection(SECTION.tickets);
+    bookTickets();
   };
 
   return (

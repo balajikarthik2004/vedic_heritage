@@ -2,10 +2,13 @@
 import heroBg from '../assets/hero_background.webp';
 import artistsImg from '../assets/image 3.webp';
 import logoImg from '../assets/logo.webp';
-import { SECTION } from '../config/site';
-import { scrollToSection } from '../lib/navigation';
+import { useBookTickets } from '../lib/booking';
 
 export function Hero() {
+  // Opens the ticket form directly. It used to scroll to the tickets section,
+  // which left the visitor to find a second button to actually book.
+  const bookTickets = useBookTickets();
+
   return (
     <div className="bg-white">
       <section className="relative overflow-hidden w-full min-h-[680px] md:min-h-0 md:h-[580px]">
@@ -95,7 +98,7 @@ export function Hero() {
             {/* BOOK NOW pill */}
             <button
               type="button"
-              onClick={() => scrollToSection(SECTION.tickets)}
+              onClick={bookTickets}
               className="bg-white border-none rounded-full flex items-center cursor-pointer transition-all duration-200 hover:-translate-y-0.5 group"
               style={{
                 padding: '6px 6px 6px 22px',

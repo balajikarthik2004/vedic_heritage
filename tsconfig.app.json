@@ -23,5 +23,9 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  /* Tests are typechecked by tsconfig.test.json, which adds the vitest and
+     jest-dom types. Keeping them out here means `npm run build` compiles only
+     what ships. */
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test"]
 }

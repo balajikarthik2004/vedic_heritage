@@ -1,6 +1,7 @@
 import React from 'react';
 import hanumanImg from '../assets/hanuman-mandir.webp';
-import { BOOKING, SECTION, SPONSORSHIP_MAILTO, TICKET_SKU } from '../config/site';
+import { SECTION, TICKET_SKU } from '../config/site';
+import { useBookTickets } from '../lib/booking';
 import { useCheckout } from '../lib/checkoutContext';
 import { formatMoney } from '../lib/payments';
 
@@ -15,31 +16,27 @@ export const SecureSeatSection: React.FC<SecureSeatSectionProps> = ({
   onPurchaseTicket,
   onContactSponsorship,
 }) => {
-  const { openCheckout, getProduct } = useCheckout();
+  const { getProduct, showContactDetails } = useCheckout();
+  const bookTickets = useBookTickets();
 
   // Price comes from the server when available so the button can never advertise
   // an amount different from the one that gets charged.
   const ticket = getProduct(TICKET_SKU);
   const priceLabel = ticket ? formatMoney(ticket.unitAmountCents) : '$100';
 
-  // End of the booking funnel, so it always leads somewhere: an external
-  // ticketing page when one is configured, otherwise the checkout form - and
-  // the provider falls back to the phone/email dialog if that form cannot open.
-  const purchaseTicket =
-    onPurchaseTicket ??
-    (() => {
-      if (BOOKING.ticketUrl) {
-        window.location.href = BOOKING.ticketUrl;
-        return;
-      }
-      openCheckout(TICKET_SKU);
-    });
+  // Shared with every other booking button on the page, so all of them lead
+  // to the same place: an external ticketing page when one is configured,
+  // otherwise the checkout form - and the provider falls back to the
+  // phone/email dialog if that form cannot open.
+  const purchaseTicket = onPurchaseTicket ?? bookTickets;
 
+  // Shows the phone number and email address in a dialog. It used to navigate
+  // to a `mailto:` link, which on a machine with no mail client configured does
+  // nothing whatsoever - so the button looked broken to exactly the visitor we
+  // most want to hear from. The dialog still offers the pre-filled enquiry for
+  // anyone who does have mail set up.
   const contactSponsorship =
-    onContactSponsorship ??
-    (() => {
-      window.location.href = SPONSORSHIP_MAILTO;
-    });
+    onContactSponsorship ?? (() => showContactDetails('sponsorship'));
 
   return (
     <section

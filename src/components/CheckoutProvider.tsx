@@ -1,5 +1,12 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { CheckoutContext } from '../lib/checkoutContext';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode
+} from 'react';
+import { CheckoutContext, type ContactReason } from '../lib/checkoutContext';
 import {
   clearReturnedOrderRef,
   fetchCatalogue,
@@ -21,10 +28,27 @@ import { PaymentReturn } from './PaymentReturn';
  */
 export function CheckoutProvider({ children }: { children: ReactNode }) {
   const [products, setProducts] = useState<CatalogueProduct[] | null>(null);
+  /** False until the price-list fetch has settled, one way or the other. */
+  const [catalogueSettled, setCatalogueSettled] = useState(false);
   const [activeSku, setActiveSku] = useState<string | null>(null);
-  // Shown when a call to action cannot open the form because the price list is
-  // not there. See openCheckout below.
-  const [showContactFallback, setShowContactFallback] = useState(false);
+  /**
+   * A SKU clicked before the price list arrived.
+   *
+   * Held in a ref because the fetch callback below reads it: as state it would
+   * have to be a dependency of that effect, and a click would restart the
+   * fetch. `waiting` mirrors it for rendering only.
+   */
+  const pendingSku = useRef<string | null>(null);
+  const [waiting, setWaiting] = useState(false);
+  /**
+   * Why the phone/email dialog is open, or null when it is not.
+   *
+   * One piece of state with two ways in: a call to action that cannot open the
+   * form (see openCheckout), and one that asks for contact details on purpose
+   * (see showContactDetails). The reason travels with it so the dialog can say
+   * something true in both cases.
+   */
+  const [contactReason, setContactReason] = useState<ContactReason | null>(null);
   // The provider appends ?ref= on the way back. Read once at mount, before
   // anything else can rewrite the URL.
   const [returnedRef, setReturnedRef] = useState<string | null>(
@@ -34,19 +58,43 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
+    /**
+     * Honour a click that landed while the list was still in flight.
+     *
+     * Done here rather than in an effect watching `products`, so the only
+     * state updates happen in this callback - the click is resolved the moment
+     * the answer exists, with nothing to keep in step.
+     */
+    const resolvePendingClick = (list: CatalogueProduct[] | null) => {
+      const wanted = pendingSku.current;
+      if (!wanted) return;
+      pendingSku.current = null;
+      setWaiting(false);
+      if (list?.some((product) => product.sku === wanted)) {
+        setActiveSku(wanted);
+      } else {
+        setContactReason('payment-unavailable');
+      }
+    };
+
     fetchCatalogue()
       .then((catalogue) => {
         if (cancelled) return;
         // Only a non-empty list counts as loaded: `openCheckout` treats a
         // null list as "cannot open the form", so an empty catalogue routes to
         // the contact dialog rather than opening a form with nothing in it.
-        setProducts(catalogue.products.length > 0 ? catalogue.products : null);
+        const list = catalogue.products.length > 0 ? catalogue.products : null;
+        setProducts(list);
+        setCatalogueSettled(true);
+        resolvePendingClick(list);
       })
       .catch(() => {
         // Deliberately silent: the fallback path is a working one, and a console
         // error on a public marketing page helps nobody.
         if (cancelled) return;
         setProducts(null);
+        setCatalogueSettled(true);
+        resolvePendingClick(null);
       });
 
     return () => {
@@ -70,10 +118,34 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
         setActiveSku(sku);
         return;
       }
-      setShowContactFallback(true);
+      // Clicked before the price list arrived. Now that a booking button sits
+      // in the navbar, above the fold and clickable immediately, this is a
+      // real race on a cold API - and answering it with "phone us instead"
+      // for a payment page that is a moment away would be absurd. The fetch
+      // opens the form as soon as it lands.
+      if (!catalogueSettled) {
+        pendingSku.current = sku;
+        setWaiting(true);
+        return;
+      }
+      setContactReason('payment-unavailable');
     },
-    [products]
+    [products, catalogueSettled]
   );
+
+  /** Open the phone/email dialog deliberately, not as a fallback. */
+  const showContactDetails = useCallback(
+    (reason: ContactReason = 'payment-unavailable') => {
+      setContactReason(reason);
+    },
+    []
+  );
+
+  /** Give up on a queued click, so the wait is never a trap. */
+  const cancelWaiting = useCallback(() => {
+    pendingSku.current = null;
+    setWaiting(false);
+  }, []);
 
   const getProduct = useCallback(
     (sku: string) => products?.find((product) => product.sku === sku),
@@ -81,8 +153,8 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ openCheckout, getProduct }),
-    [openCheckout, getProduct]
+    () => ({ openCheckout, showContactDetails, getProduct }),
+    [openCheckout, showContactDetails, getProduct]
   );
 
   const activeProduct =
@@ -118,9 +190,34 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
         onClose={() => setActiveSku(null)}
       />
 
+      {/* Shown only for the moment between an early click and the price list
+          arriving, so the button visibly does something either way. */}
+      {waiting && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={cancelWaiting}
+        >
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex items-center gap-3 rounded-xl bg-white px-5 py-4 shadow-2xl"
+          >
+            <div
+              className="h-5 w-5 animate-spin rounded-full border-[3px] border-gray-200"
+              style={{ borderTopColor: '#e98314' }}
+              aria-hidden="true"
+            />
+            <p className="font-['Outfit',sans-serif] text-[12px] text-gray-700">
+              One moment &mdash; loading ticket prices...
+            </p>
+          </div>
+        </div>
+      )}
+
       <ContactFallbackDialog
-        open={showContactFallback}
-        onClose={() => setShowContactFallback(false)}
+        open={contactReason !== null}
+        reason={contactReason ?? 'payment-unavailable'}
+        onClose={() => setContactReason(null)}
       />
 
       {returnedRef && (

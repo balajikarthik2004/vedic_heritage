@@ -2,8 +2,10 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
   ApiError,
   formatMoney,
+  previewDiscount,
   startCheckout,
-  type CatalogueProduct
+  type CatalogueProduct,
+  type DiscountPreview
 } from '../lib/payments';
 
 export interface CheckoutModalProps {
@@ -124,6 +126,40 @@ export function CheckoutModal({
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Discount code state.
+  //
+  // `codeInput` is what is being typed; `appliedCode` is what the buyer has
+  // asked us to use. They are separate so typing does not fire a request per
+  // keystroke, and so a code stays applied while the buyer edits other fields.
+  const [codeInput, setCodeInput] = useState('');
+  const [appliedCode, setAppliedCode] = useState<string | null>(null);
+  const [codeError, setCodeError] = useState<string | null>(null);
+  /**
+   * The server's quote, tagged with the order it was calculated for.
+   *
+   * The saving shown is always the server's arithmetic and never ours - which
+   * is what stops the form promising a discount the checkout would not honour.
+   * Storing the tag makes "are we still waiting?" a derived value rather than
+   * another piece of state to keep in step, and means a saving can never be
+   * rendered against an order it was not quoted for.
+   */
+  const [quote, setQuote] = useState<{
+    key: string;
+    preview: DiscountPreview;
+  } | null>(null);
+
+  /**
+   * Latest email, without making it a dependency of the quote.
+   *
+   * A once-per-person code needs the address to check, but re-quoting on every
+   * keystroke of an email field would be absurd - and the authoritative check
+   * happens at checkout, where the address is always present.
+   */
+  const emailRef = useRef('');
+  useEffect(() => {
+    emailRef.current = email;
+  }, [email]);
+
   /**
    * Idempotency key, held stable for a given payload.
    *
@@ -213,10 +249,97 @@ export function CheckoutModal({
     );
   }, [product, sponsorshipOptions, selectedSku]);
 
-  const totalCents = useMemo(
+  const subtotalCents = useMemo(
     () => (activeProduct ? activeProduct.unitAmountCents * quantity : 0),
     [activeProduct, quantity]
   );
+
+  const activeSku = activeProduct?.sku;
+
+  /**
+   * Whether a discount code is offered for what is being bought.
+   *
+   * Tickets only. A sponsorship is a charitable gift rather than a purchase, so
+   * every code in the server catalogue is ticket-only and one entered on a
+   * sponsorship could only ever be refused - offering the field there just
+   * invites sponsors to hunt for a code that does not exist. The server stays
+   * the authority either way; this only stops the form asking a question that
+   * has no good answer.
+   */
+  const discountsApply = activeProduct?.kind === 'ticket';
+
+  /** The order a quote would have to describe to be usable right now. */
+  const quoteKey =
+    appliedCode && activeSku && discountsApply
+      ? `${appliedCode}|${activeSku}|${quantity}`
+      : null;
+
+  /** True while the server has not yet priced the order on screen. */
+  const checkingCode = quoteKey !== null && quote?.key !== quoteKey;
+
+  /**
+   * Quote the applied code against the order as it currently stands.
+   *
+   * This is the only place a quote is fetched, including for the Apply button -
+   * which just records the code and lets this run. So changing the quantity
+   * re-prices the discount rather than leaving a stale saving on screen, and
+   * there is one code path to reason about instead of two.
+   *
+   * A code that no longer applies (below its minimum after the quantity was
+   * lowered, expired while the form sat open) is taken off the form with the
+   * server's own explanation, rather than silently ignored at submit.
+   */
+  useEffect(() => {
+    if (!appliedCode || !activeSku || quoteKey === null) return;
+    // Already priced for this exact order.
+    if (quote?.key === quoteKey) return;
+
+    let cancelled = false;
+
+    previewDiscount({
+      code: appliedCode,
+      sku: activeSku,
+      quantity,
+      email: emailRef.current.trim().toLowerCase() || undefined
+    })
+      .then((preview) => {
+        if (cancelled) return;
+        setQuote({ key: quoteKey, preview });
+        setCodeError(null);
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setQuote(null);
+        setAppliedCode(null);
+        setCodeError(
+          error instanceof ApiError
+            ? error.message
+            : 'We could not check that code. Please try again.'
+        );
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [appliedCode, activeSku, quantity, quoteKey, quote?.key]);
+
+  /**
+   * Whether there is a saving to show for the order on screen.
+   *
+   * The subtotal comparison is a second lock on top of the quote key: the
+   * server's arithmetic wins, so if it ever priced a different subtotal than
+   * the catalogue shows, nothing is claimed rather than something wrong.
+   */
+  const discountShown =
+    !checkingCode &&
+    quote !== null &&
+    quote.preview.discountAmountCents > 0 &&
+    quote.preview.subtotalAmountCents === subtotalCents;
+
+  /** What the buyer will actually be charged. */
+  const payableCents = discountShown
+    ? quote.preview.totalAmountCents
+    : subtotalCents;
 
   // Errors are computed during render rather than mirrored into state: they are
   // a pure function of the current values, and storing them would need an
@@ -234,9 +357,27 @@ export function CheckoutModal({
   const allowsQuantity = activeProduct.maxQuantity > 1;
   const showTierSelect = isSponsorship && sponsorshipOptions.length > 1;
 
+  /** Record the typed code; the effect above does the asking. */
+  const handleApplyCode = () => {
+    const code = codeInput.trim().toUpperCase();
+    if (code === '' || checkingCode) return;
+    setCodeError(null);
+    setCodeInput(code);
+    setAppliedCode(code);
+  };
+
+  const handleRemoveCode = () => {
+    setAppliedCode(null);
+    setQuote(null);
+    setCodeError(null);
+    setCodeInput('');
+  };
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (submitting) return;
+    // Not while a quote is in flight: the buyer would be agreeing to a total
+    // that is about to change on screen.
+    if (submitting || checkingCode) return;
 
     setSubmitted(true);
     setFormError(null);
@@ -260,7 +401,11 @@ export function CheckoutModal({
         sku: activeProduct.sku,
         quantity,
         email: email.trim().toLowerCase(),
-        location: location.trim()
+        location: location.trim(),
+        // Part of the signature: applying or removing a code is a different
+        // order, and reusing the key would send the buyer back to the amount
+        // they had before.
+        discountCode: appliedCode ?? ''
       });
 
       const result = await startCheckout({
@@ -272,6 +417,10 @@ export function CheckoutModal({
         location: isSponsorship ? location.trim() : undefined,
         sku: activeProduct.sku,
         quantity,
+        // The code only, and only where codes are offered. What it is worth is
+        // the server's decision, which it makes again rather than trusting the
+        // quote above.
+        discountCode: (isTicket ? appliedCode : null) ?? undefined,
         idempotencyKey: keyFor(signature)
       });
 
@@ -280,6 +429,21 @@ export function CheckoutModal({
       window.location.assign(result.checkoutUrl);
     } catch (error) {
       setSubmitting(false);
+
+      // A code the server refused has to come off the form, or the buyer sees a
+      // discounted total they can never be charged and every retry fails the
+      // same way. Their next click then goes through at the honest price.
+      if (
+        error instanceof ApiError &&
+        (error.code === 'invalid_discount_code' ||
+          error.code.startsWith('discount_'))
+      ) {
+        setAppliedCode(null);
+        setQuote(null);
+        setCodeError(error.message);
+        setFormError(null);
+        return;
+      }
 
       setFormError(
         error instanceof ApiError
@@ -541,20 +705,126 @@ export function CheckoutModal({
                 )}
               </div>
             )}
+
+            {/* Discount code. Tickets only - see `discountsApply` above.
+                Only the code is sent; the saving beside it is the server's own
+                arithmetic for this exact order. Enter applies the code rather
+                than submitting the form - reaching the payment page by pressing
+                Enter in a code field would be a nasty surprise. */}
+            {isTicket && (
+              <div>
+                <label
+                  htmlFor="checkout-discount"
+                  className="mb-1.5 block font-['Outfit',sans-serif] text-[11px] font-semibold uppercase tracking-wide text-gray-600"
+                >
+                  Discount code{' '}
+                  <span className="font-normal normal-case tracking-normal text-gray-400">
+                    (optional)
+                  </span>
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    id="checkout-discount"
+                    name="discountCode"
+                    type="text"
+                    autoComplete="off"
+                    autoCapitalize="characters"
+                    spellCheck={false}
+                    value={codeInput}
+                    disabled={appliedCode !== null}
+                    onChange={(event) => setCodeInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        handleApplyCode();
+                      }
+                    }}
+                    aria-invalid={Boolean(codeError)}
+                    aria-describedby="checkout-discount-hint"
+                    className={[
+                      fieldClass(Boolean(codeError)),
+                      'uppercase placeholder:normal-case',
+                      'disabled:bg-gray-50 disabled:text-gray-500'
+                    ].join(' ')}
+                    placeholder="Enter code"
+                  />
+                  {appliedCode !== null ? (
+                    <button
+                      type="button"
+                      onClick={handleRemoveCode}
+                      className="shrink-0 rounded-md border border-gray-300 px-3 font-['Outfit',sans-serif] text-[11px] font-bold uppercase tracking-wider text-gray-600 transition hover:bg-gray-50"
+                    >
+                      Remove
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleApplyCode}
+                      disabled={codeInput.trim() === '' || checkingCode}
+                      className="shrink-0 rounded-md border border-[#4A0D12] px-4 font-['Outfit',sans-serif] text-[11px] font-bold uppercase tracking-wider text-[#4A0D12] transition hover:bg-[#4A0D12] hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#4A0D12]"
+                    >
+                      Apply
+                    </button>
+                  )}
+                </div>
+                <p
+                  id="checkout-discount-hint"
+                  role="status"
+                  className="mt-1 font-['Outfit',sans-serif] text-[11px] text-gray-500"
+                >
+                  {codeError ? (
+                    <span className="text-red-600">{codeError}</span>
+                  ) : checkingCode ? (
+                    'Checking your code...'
+                  ) : discountShown ? (
+                    <span className="font-semibold text-green-700">
+                      {quote.preview.code} applied &mdash; you save{' '}
+                      {formatMoney(quote.preview.discountAmountCents)}.
+                    </span>
+                  ) : (
+                    'Have a code? Apply it to see your saving before you pay.'
+                  )}
+                </p>
+              </div>
+            )}
           </div>
 
-          {/* Total. Shown from the server-provided unit price, so it always
-              matches what will actually be charged. */}
-          <div className="mt-5 flex items-baseline justify-between rounded-lg bg-[#fff8f0] px-4 py-3">
-            <span className="font-['Outfit',sans-serif] text-[11px] font-semibold uppercase tracking-wide text-gray-600">
-              Total
-            </span>
-            <span
-              className="font-['Outfit',sans-serif] text-xl font-extrabold"
-              style={{ color: GOLD }}
-            >
-              {formatMoney(totalCents)}
-            </span>
+          {/* Totals. Every figure comes from the server - the unit price from
+              the catalogue, the saving from the discount quote - so what the
+              buyer reads is what will be charged. */}
+          <div className="mt-5 rounded-lg bg-[#fff8f0] px-4 py-3">
+            {discountShown && (
+              <>
+                <div className="flex items-baseline justify-between">
+                  <span className="font-['Outfit',sans-serif] text-[11px] font-semibold uppercase tracking-wide text-gray-600">
+                    Subtotal
+                  </span>
+                  <span className="font-['Outfit',sans-serif] text-sm font-semibold text-gray-700">
+                    {formatMoney(subtotalCents)}
+                  </span>
+                </div>
+                <div className="mt-1.5 flex items-baseline justify-between gap-3">
+                  <span className="font-['Outfit',sans-serif] text-[11px] font-semibold uppercase tracking-wide text-green-700">
+                    {quote.preview.label ?? 'Discount'}
+                  </span>
+                  <span className="font-['Outfit',sans-serif] text-sm font-semibold text-green-700">
+                    &minus;{formatMoney(quote.preview.discountAmountCents)}
+                  </span>
+                </div>
+                <div className="my-2.5 border-t border-[#e98314]/25" />
+              </>
+            )}
+            <div className="flex items-baseline justify-between">
+              <span className="font-['Outfit',sans-serif] text-[11px] font-semibold uppercase tracking-wide text-gray-600">
+                Total
+              </span>
+              <span
+                className="font-['Outfit',sans-serif] text-xl font-extrabold"
+                style={{ color: GOLD }}
+              >
+                {formatMoney(payableCents)}
+              </span>
+            </div>
           </div>
 
           {formError && (
@@ -568,7 +838,7 @@ export function CheckoutModal({
 
           <button
             type="submit"
-            disabled={submitting}
+            disabled={submitting || checkingCode}
             className="mt-5 w-full rounded-md py-3 font-['Outfit',sans-serif] text-xs font-bold uppercase tracking-wider text-white shadow-lg transition disabled:cursor-not-allowed disabled:opacity-60"
             style={{ backgroundColor: submitting ? '#9ca3af' : GOLD }}
           >

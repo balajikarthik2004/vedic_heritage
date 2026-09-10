@@ -6,6 +6,11 @@
  * devtools cannot change what is charged. Prices shown on the page come from
  * `fetchCatalogue` for the same reason: what the buyer sees is what the server
  * will charge.
+ *
+ * A discount code follows the same rule: the browser sends the CODE, and the
+ * server decides what it is worth. `previewDiscount` exists only so the form
+ * can show the saving before the buyer commits - it grants nothing, and the
+ * checkout re-evaluates the code independently.
  */
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/+$/, '');
@@ -41,12 +46,28 @@ export interface CheckoutRequest {
   location?: string;
   sku: string;
   quantity: number;
+  /** Discount code as typed, when one was applied. Never an amount. */
+  discountCode?: string;
   idempotencyKey: string;
 }
 
 export interface CheckoutResponse {
   orderRef: string;
   checkoutUrl: string;
+  subtotalAmountCents: number;
+  discountCode: string | null;
+  discountLabel: string | null;
+  discountAmountCents: number;
+  totalAmountCents: number;
+  currency: string;
+}
+
+/** What a discount code is worth on a specific order, as priced by the server. */
+export interface DiscountPreview {
+  code: string | null;
+  label: string | null;
+  subtotalAmountCents: number;
+  discountAmountCents: number;
   totalAmountCents: number;
   currency: string;
 }
@@ -58,6 +79,10 @@ export interface OrderView {
   productKind: string;
   quantity: number;
   seats: number;
+  subtotalAmountCents: number;
+  discountCode: string | null;
+  discountLabel: string | null;
+  discountAmountCents: number;
   totalAmountCents: number;
   deductibleAmountCents: number;
   currency: string;
@@ -210,6 +235,26 @@ export async function fetchCatalogue(): Promise<Catalogue> {
 
 export function startCheckout(body: CheckoutRequest): Promise<CheckoutResponse> {
   return apiFetch<CheckoutResponse>('/payments/checkout', {
+    method: 'POST',
+    body: JSON.stringify(body)
+  });
+}
+
+/**
+ * Ask the server what a discount code is worth on this order.
+ *
+ * Quoted against the SKU and quantity because that is what the code applies
+ * to: a percentage needs a subtotal, and a code can carry a minimum. So the
+ * quote has to be refreshed whenever the order changes, which is what the
+ * effect in CheckoutModal does.
+ */
+export function previewDiscount(body: {
+  code: string;
+  sku: string;
+  quantity: number;
+  email?: string;
+}): Promise<DiscountPreview> {
+  return apiFetch<DiscountPreview>('/payments/discounts/preview', {
     method: 'POST',
     body: JSON.stringify(body)
   });

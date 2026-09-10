@@ -1,13 +1,38 @@
 import { useEffect, useId, useRef } from 'react';
 import { CONTACT, SPONSORSHIP_MAILTO } from '../config/site';
+import type { ContactReason } from '../lib/checkoutContext';
 
 const MAROON = '#4A0D12';
 const GOLD = '#e98314';
 
 export interface ContactFallbackDialogProps {
   open: boolean;
+  /**
+   * Why it opened. Defaults to the fallback case.
+   *
+   * A sponsor who pressed "Contact for sponsorship" is not being told bad
+   * news, so they must not read that online payment has failed.
+   */
+  reason?: ContactReason;
   onClose: () => void;
 }
+
+const WORDING: Record<ContactReason, { title: string; body: string }> = {
+  'payment-unavailable': {
+    title: 'Let us take this by phone or email',
+    body:
+      'Online payment is unavailable at the moment. Please call or email us ' +
+      'and we will book your tickets or arrange your sponsorship directly - ' +
+      'your seats are not lost.'
+  },
+  sponsorship: {
+    title: 'Talk to us about sponsorship',
+    body:
+      'We would be glad to help you choose the right tier and get your ' +
+      'recognition exactly right. Call or email us and we will arrange your ' +
+      'sponsorship personally.'
+  }
+};
 
 /**
  * Shown when a call to action cannot open the checkout form.
@@ -19,7 +44,12 @@ export interface ContactFallbackDialogProps {
  * nothing at all: the button looked broken. A visible dialog with the phone
  * number and the email address cannot fail that way.
  */
-export function ContactFallbackDialog({ open, onClose }: ContactFallbackDialogProps) {
+export function ContactFallbackDialog({
+  open,
+  reason = 'payment-unavailable',
+  onClose
+}: ContactFallbackDialogProps) {
+  const wording = WORDING[reason];
   const titleId = useId();
   const closeRef = useRef<HTMLButtonElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
@@ -67,15 +97,13 @@ export function ContactFallbackDialog({ open, onClose }: ContactFallbackDialogPr
             id={titleId}
             className="font-['Alga','Bodoni_Moda','Playfair_Display',Georgia,serif] text-lg font-normal text-[#FFD238]"
           >
-            Let us take this by phone or email
+            {wording.title}
           </h2>
         </div>
 
         <div className="px-6 py-6">
           <p className="font-['Outfit',sans-serif] text-[12px] leading-relaxed text-gray-600">
-            Online payment is unavailable at the moment. Please call or email us
-            and we will book your tickets or arrange your sponsorship directly -
-            your seats are not lost.
+            {wording.body}
           </p>
 
           <div className="mt-4 space-y-2 rounded-lg bg-[#fff8f0] p-4">

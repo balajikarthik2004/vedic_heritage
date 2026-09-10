@@ -124,6 +124,32 @@ export function PaymentReturn({ orderRef, onDismiss }: PaymentReturnProps) {
                 <dt className="font-semibold text-gray-500">Seats</dt>
                 <dd className="text-gray-900">{order.seats}</dd>
 
+                {/* Shown only when a code was used, and taken from the order
+                    rather than from anything the browser remembers - this
+                    dialog can be opened on a fresh page load with only ?ref. */}
+                {order.discountAmountCents > 0 && (
+                  <>
+                    <dt className="font-semibold text-gray-500">Subtotal</dt>
+                    <dd className="text-gray-900">
+                      {formatMoney(order.subtotalAmountCents, order.currency)}
+                    </dd>
+
+                    <dt className="font-semibold text-green-700">
+                      {order.discountLabel ?? 'Discount'}
+                    </dt>
+                    <dd className="text-green-700">
+                      &minus;
+                      {formatMoney(order.discountAmountCents, order.currency)}
+                      {order.discountCode && (
+                        <span className="text-gray-500">
+                          {' '}
+                          ({order.discountCode})
+                        </span>
+                      )}
+                    </dd>
+                  </>
+                )}
+
                 <dt className="font-semibold text-gray-500">Paid</dt>
                 <dd className="font-bold text-gray-900">
                   {formatMoney(order.totalAmountCents, order.currency)}
